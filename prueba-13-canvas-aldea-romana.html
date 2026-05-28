@@ -278,15 +278,16 @@ function drawRock(g, sx, sy, rng){
   g.fillStyle = '#8a857c';
   g.fillRect(cx, cy, 1, 1);
 }
-// Casita romana en isométrico (1 tile). Caja con muros beige y tejado a
-// dos aguas terracota. Variantes de tamaño con `tall` (insula pequeña).
+// Casita romana en isométrico, ahora más grande y prominente.
+// Caja con muros beige y tejado a dos aguas terracota. Variantes con
+// `tall` (insula). Tamaño aumentado para que sean visibles en el zoom
+// general del viewport (SCALE = 3).
 function drawHouse(g, sx, sy, rng){
   drawShadow(g, sx, sy);
-  const tall = rng() < 0.25; // ~1 de cada 4 sale más alta
-  const hWall = tall ? 9 : 7;  // alto de muros
-  const hRoof = tall ? 7 : 6;  // alto del tejado por encima
-  // Ancho base del cuerpo (encaja en el rombo del tile)
-  const halfW = 9;             // semianchura horizontal del cuerpo
+  const tall = rng() < 0.30;
+  const hWall = tall ? 13 : 10;
+  const hRoof = tall ? 9 : 8;
+  const halfW = 12;
   // --- muros: cara frontal-izquierda y frontal-derecha ---
   // top del muro está en sy - hWall (sobre la línea del suelo del tile)
   const baseY = sy + TH - 3;   // base del muro, dejando 2px de sombra del tile

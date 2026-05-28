@@ -398,10 +398,14 @@ function build(seed){
     color: 0xd0bf9c, roughness: 0.92, flatShading: true,
   });
   const insulae = new THREE.InstancedMesh(insulaBodyGeo, insulaBodyMat, MAX_INSULA);
-  const insulaRoofGeo = new THREE.CylinderGeometry(1.7, 1.7, 4.0, 3, 1);
-  insulaRoofGeo.rotateY(Math.PI/6);
-  insulaRoofGeo.rotateX(Math.PI/2);
-  insulaRoofGeo.translate(0, 2.6 + 0.8, 0);
+  // tejado prismático correcto (ExtrudeGeometry sobre Shape triangular)
+  const insulaShape = new THREE.Shape();
+  insulaShape.moveTo(-1.6, 0);
+  insulaShape.lineTo( 1.6, 0);
+  insulaShape.lineTo( 0,   1.0);
+  insulaShape.lineTo(-1.6, 0);
+  const insulaRoofGeo = new THREE.ExtrudeGeometry(insulaShape, { depth: 4.0, bevelEnabled: false });
+  insulaRoofGeo.translate(0, 2.6, -2.0);
   const insulaRoofMat = new THREE.MeshStandardMaterial({
     color: 0xc44a32, roughness: 0.82, flatShading: true,
   });
@@ -460,16 +464,19 @@ function build(seed){
   );
   cella.position.y = URB_Y + 0.6 + 1.2;
   templeGroup.add(cella);
-  // frontón a dos aguas (prisma triangular)
-  const pediGeo = new THREE.CylinderGeometry(1.6, 1.6, 4.0, 3, 1);
-  pediGeo.rotateY(Math.PI/6);
-  pediGeo.rotateX(Math.PI/2);
+  // frontón a dos aguas (prisma triangular real vía ExtrudeGeometry)
+  const pediShape = new THREE.Shape();
+  pediShape.moveTo(-2.7, 0);
+  pediShape.lineTo( 2.7, 0);
+  pediShape.lineTo( 0,   1.4);
+  pediShape.lineTo(-2.7, 0);
+  const pediGeo = new THREE.ExtrudeGeometry(pediShape, { depth: 4.2, bevelEnabled: false });
+  pediGeo.translate(0, 0, -2.1);   // centrar en Z
   const pediment = new THREE.Mesh(
     pediGeo,
     new THREE.MeshStandardMaterial({ color: 0xc44a32, roughness: 0.82, flatShading: true })
   );
-  pediment.position.y = URB_Y + 0.6 + 2.4 + 0.7;
-  pediment.scale.set(1.35, 1, 1.05);
+  pediment.position.y = URB_Y + 0.6 + 2.4;
   templeGroup.add(pediment);
   root.add(templeGroup);
 }

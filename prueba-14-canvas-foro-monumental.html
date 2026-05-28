@@ -287,15 +287,13 @@ function drawRock(g, sx, sy, rng){
   g.fillStyle = '#8a857c';
   g.fillRect(cx, cy, 1, 1);
 }
-// Casita romana en isométrico (1 tile). Caja con muros beige y tejado a
-// dos aguas terracota. Variantes de tamaño con `tall` (insula pequeña).
+// Casita romana en iso. Tamaño aumentado para que sea visible bien.
 function drawHouse(g, sx, sy, rng){
   drawShadow(g, sx, sy);
-  const tall = rng() < 0.25; // ~1 de cada 4 sale más alta
-  const hWall = tall ? 9 : 7;  // alto de muros
-  const hRoof = tall ? 7 : 6;  // alto del tejado por encima
-  // Ancho base del cuerpo (encaja en el rombo del tile)
-  const halfW = 9;             // semianchura horizontal del cuerpo
+  const tall = rng() < 0.30;
+  const hWall = tall ? 13 : 10;
+  const hRoof = tall ? 9 : 8;
+  const halfW = 12;
   // --- muros: cara frontal-izquierda y frontal-derecha ---
   // top del muro está en sy - hWall (sobre la línea del suelo del tile)
   const baseY = sy + TH - 3;   // base del muro, dejando 2px de sombra del tile
@@ -586,10 +584,13 @@ function generateWorld(W, H, seed){
       }
     }
   }
-  // pase 3: monumentos centrales del foro. Buscamos 3 puntos en una
-  // zona central plana y de hierba, separados, y forzamos TEMPLE, FORUM,
-  // AMPHI. Limpiamos también los tiles vecinos para que no se solapen.
-  const cx0 = W >> 1, cy0 = H >> 1;
+  // pase 3: monumentos centrales del foro.
+  // El "centro visual" del viewport en la proyección iso NO es (W/2, H/2)
+  // del array — esa celda cae hacia abajo del viewport. Resolviendo
+  // i+j = H/2 e i-j = 1 (ver paintActiveRail-style math) sale i ≈ j ≈ H/4.
+  // Por eso ponemos el foro alrededor de (H/4, H/4).
+  const cx0 = Math.max(2, Math.floor(W / 4));
+  const cy0 = Math.max(2, Math.floor(H / 4));
   const targets = [DECO.TEMPLE, DECO.FORUM, DECO.AMPHI];
   const slots = [
     [cx0 - 3, cy0 - 3],

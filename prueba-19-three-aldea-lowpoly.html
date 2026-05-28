@@ -370,7 +370,8 @@ function build(seed){
      Misma matrix para ambos InstancedMesh, así se mueven juntos.
      Spawn gateado por noise distinto al de los árboles para que las
      casas formen pequeñas aldeas separadas del bosque. */
-  const MAX_HOUSES = 80;
+  const MAX_HOUSES = 28;
+  const MIN_HOUSE_DIST = 4.2; // separación mínima entre casas (mundo)
   // cuerpo: caja 2x1.4x2 (alto 1.4)
   const bodyGeo = new THREE.BoxGeometry(2.0, 1.4, 2.0);
   bodyGeo.translate(0, 0.7, 0); // pivot en el suelo
@@ -378,33 +379,44 @@ function build(seed){
     color: 0xd8c8a8, roughness: 0.95, flatShading: true,
   });
   const bodies = new THREE.InstancedMesh(bodyGeo, bodyMat, MAX_HOUSES);
-  // tejado: prisma triangular (cilindro 3-segmentos, "radio" actúa como anchura)
-  // height del cilindro será el ALTO del prisma; lo rotamos para que el eje
-  // sea Z (largo del tejado) y los 3 vértices apunten al cielo.
-  const roofGeo = new THREE.CylinderGeometry(1.55, 1.55, 2.0, 3, 1);
-  roofGeo.rotateY(Math.PI/6); // alinear las caras
-  roofGeo.rotateZ(Math.PI/2); // tumbar el eje (Y→Z)
-  // ahora la altura del prisma queda en Y aprox; ajustamos pivot
-  roofGeo.translate(0, 1.4 + 0.55, 0);
+  // tejado: prisma triangular real construido con ExtrudeGeometry sobre
+  // un Shape triangular. Sale con dos pendientes + frontones triangulares
+  // en los testeros, todo en color terracota. Cumbrera a lo largo del eje Z.
+  const roofShape = new THREE.Shape();
+  roofShape.moveTo(-1.15, 0);
+  roofShape.lineTo( 1.15, 0);
+  roofShape.lineTo( 0, 0.95);
+  roofShape.lineTo(-1.15, 0);
+  const roofGeo = new THREE.ExtrudeGeometry(roofShape, { depth: 2.3, bevelEnabled: false });
+  roofGeo.translate(0, 1.4, -1.15);    // sobre el cuerpo, centrado en Z
   const roofMat = new THREE.MeshStandardMaterial({
     color: 0xc44a32, roughness: 0.85, flatShading: true,
   });
   const roofs = new THREE.InstancedMesh(roofGeo, roofMat, MAX_HOUSES);
 
   let nH = 0;
-  const houseAttempts = 6000;
+  const houseAttempts = 5000;
+  const placedXZ = [];
   for (let k = 0; k < houseAttempts && nH < MAX_HOUSES; k++){
     const x = (rng()-0.5) * WORLD * 0.85;
     const z = (rng()-0.5) * WORLD * 0.85;
     if (isWater(x,z) || isShore(x,z)) continue;
     // noise específico de aldea (distinto al de árboles)
     const vg = fbm(noise, x*0.05+22, z*0.05-17, 3);
-    if (vg < 0.20) continue;
-    if (rng() > 0.30) continue;
-    // evitar pendientes muy fuertes (casas en terreno relativamente plano)
+    if (vg < 0.30) continue;
+    if (rng() > 0.55) continue;
+    // evitar pendientes muy fuertes
     const h0 = sampleHill(x, z);
     const h1 = sampleHill(x+0.5, z+0.5);
-    if (Math.abs(h1 - h0) > 0.45) continue;
+    if (Math.abs(h1 - h0) > 0.40) continue;
+    // separación mínima respecto a casas ya colocadas
+    let tooClose = false;
+    for (const pp of placedXZ){
+      const dx = x - pp[0], dz = z - pp[1];
+      if (dx*dx + dz*dz < MIN_HOUSE_DIST*MIN_HOUSE_DIST){ tooClose = true; break; }
+    }
+    if (tooClose) continue;
+    placedXZ.push([x, z]);
     const y = 0.8 + h0 * 2.4;
     dummy.position.set(x, y, z);
     dummy.rotation.y = (Math.floor(rng()*4)) * (Math.PI/2);

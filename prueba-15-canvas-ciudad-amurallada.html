@@ -298,15 +298,13 @@ function drawRock(g, sx, sy, rng){
   g.fillStyle = '#8a857c';
   g.fillRect(cx, cy, 1, 1);
 }
-// Casita romana en isométrico (1 tile). Caja con muros beige y tejado a
-// dos aguas terracota. Variantes de tamaño con `tall` (insula pequeña).
+// Casita romana en iso (aquí no se usa mucho, las insulae son grandes).
 function drawHouse(g, sx, sy, rng){
   drawShadow(g, sx, sy);
-  const tall = rng() < 0.25; // ~1 de cada 4 sale más alta
-  const hWall = tall ? 9 : 7;  // alto de muros
-  const hRoof = tall ? 7 : 6;  // alto del tejado por encima
-  // Ancho base del cuerpo (encaja en el rombo del tile)
-  const halfW = 9;             // semianchura horizontal del cuerpo
+  const tall = rng() < 0.30;
+  const hWall = tall ? 13 : 10;
+  const hRoof = tall ? 9 : 8;
+  const halfW = 12;
   // --- muros: cara frontal-izquierda y frontal-derecha ---
   // top del muro está en sy - hWall (sobre la línea del suelo del tile)
   const baseY = sy + TH - 3;   // base del muro, dejando 2px de sombra del tile
@@ -572,15 +570,13 @@ function generateWorld(W, H, seed){
       }
     }
   }
-  // pase 2: estampar la ciudad amurallada centrada en el mapa.
-  // - Rect de muralla con puertas en mitades de los lados
-  // - Calles cardo (vertical) y decumanus (horizontal) que cruzan el rect
-  // - Bloques rectangulares de insulae entre las calles
-  // - Fuente central donde se cruzan
-  // - Limpiamos la vegetación dentro del rect y aplanamos elevación
-  const cx0 = W >> 1, cy0 = H >> 1;
-  const halfW2 = Math.min(8, Math.floor(W / 3));
-  const halfH2 = Math.min(6, Math.floor(H / 3));
+  // pase 2: estampar la ciudad amurallada centrada VISUALMENTE en el
+  // viewport. La proyección iso lleva (W/2, H/2) hacia abajo del viewport,
+  // así que ponemos el centro de la urbe alrededor de (W/4, H/4).
+  const cx0 = Math.max(4, Math.floor(W / 4));
+  const cy0 = Math.max(4, Math.floor(H / 4));
+  const halfW2 = Math.min(7, Math.floor(W / 4) - 1);
+  const halfH2 = Math.min(5, Math.floor(H / 4) - 1);
   const x0 = cx0 - halfW2, x1 = cx0 + halfW2;
   const y0 = cy0 - halfH2, y1 = cy0 + halfH2;
   for (let j = y0; j <= y1; j++){

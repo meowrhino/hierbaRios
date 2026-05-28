@@ -428,13 +428,16 @@ function build(seed){
     const archi = new THREE.Mesh(new THREE.BoxGeometry(11.4, 0.5, 7.4), marbleMat);
     archi.position.y = pos.y + 0.8 + 4.0 + 0.25;
     G.add(archi);
-    // frontón a dos aguas largo (prisma triangular)
-    const pediGeo = new THREE.CylinderGeometry(2.0, 2.0, 7.4, 3, 1);
-    pediGeo.rotateY(Math.PI/6);
-    pediGeo.rotateX(Math.PI/2);
+    // frontón a dos aguas (prisma triangular real vía ExtrudeGeometry)
+    const pediShape = new THREE.Shape();
+    pediShape.moveTo(-5.7, 0);
+    pediShape.lineTo( 5.7, 0);
+    pediShape.lineTo( 0,   2.6);
+    pediShape.lineTo(-5.7, 0);
+    const pediGeo = new THREE.ExtrudeGeometry(pediShape, { depth: 7.4, bevelEnabled: false });
+    pediGeo.translate(0, 0, -3.7);   // centrar en Z
     const pediment = new THREE.Mesh(pediGeo, roofMat);
-    pediment.position.y = pos.y + 0.8 + 4.5 + 1.3;
-    pediment.scale.set(2.85, 1, 1.0);
+    pediment.position.y = pos.y + 0.8 + 4.0 + 0.5; // justo encima del arquitrabe
     G.add(pediment);
     G.position.set(pos.x, 0, pos.z);
     return G;

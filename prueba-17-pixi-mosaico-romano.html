@@ -176,49 +176,56 @@ const frag = /* glsl */`
       else               col = c4;
     }
 
-    // --- EDIFICIOS como "emblema" central del mosaico ---
-    // Un foro estilizado: rectángulo de muros beige con tejado terracota
-    // a dos aguas representado como dos triángulos cenitales rojos.
-    // Posición en coordenadas w (centrado), tamaño relativo al viewport.
-    vec2 forumCenter = vec2(0.0, 0.0);
-    vec2 d = w - forumCenter;
-    float fw = 0.35, fh = 0.22; // semi-anchura/altura del rect
-    if (abs(d.x) < fw && abs(d.y) < fh){
-      // dentro del rectángulo del foro
-      // base muros: beige claro/oscuro según mitad superior/inferior
-      bool topHalf = d.y < 0.0;
-      vec3 muroL = vec3(0.85,0.78,0.62);
-      vec3 muroD = vec3(0.65,0.58,0.42);
-      col = topHalf ? muroL : muroD;
-      // techo a dos aguas: dos triángulos terracota en la franja central
-      // (representamos el tejado como un romboide)
-      if (abs(d.y) < fh*0.45){
-        float roofY = abs(d.y) / (fh*0.45);
-        col = mix(vec3(0.55,0.20,0.13), vec3(0.78,0.30,0.20), 1.0 - roofY);
-      }
-      // cumbrera horizontal (línea oscura)
-      if (abs(d.y) < 0.005){
-        col = vec3(0.32,0.10,0.06);
-      }
-      // columnas: 5 marcas verticales blancas a la base
-      if (abs(d.y) > fh*0.55 && abs(d.y) < fh*0.85){
-        float colSpacing = fw * 0.4;
-        float colX = mod(d.x + fw, colSpacing);
-        if (colX < 0.01){
-          col = vec3(0.92,0.88,0.78);
+    // --- EMBLEMA CENTRAL: medallón con templo cenital ---
+    // El centro del mosaico es un medallón circular (anillos concéntricos
+    // mármol/dorado) con un templo dibujado dentro: 4 columnas verticales
+    // marfil + frontón triangular rojo en la parte alta. Diseño plano,
+    // simbólico, tipo emblema romano sobre tapiz.
+    vec2 c = w - vec2(0.0, 0.0);
+    float r = length(c);
+    // anillo exterior dorado
+    if (r > 0.30 && r < 0.34){
+      col = vec3(0.78,0.62,0.28);
+    } else if (r > 0.28 && r < 0.30){
+      col = vec3(0.32,0.20,0.10);   // borde oscuro interior
+    } else if (r < 0.28){
+      // interior del medallón: fondo mármol crema
+      col = vec3(0.92,0.86,0.72);
+      float vM = hash21(p + 7.0);
+      col *= 0.92 + vM * 0.10;
+      // templo dentro (rectángulo más alto que ancho con detalles)
+      vec2 t = c - vec2(0.0, 0.04);   // desplazado hacia arriba un pelín
+      float tw = 0.18, th = 0.14;
+      if (abs(t.x) < tw && t.y > -th && t.y < th){
+        // sombra suelo (escalones inferiores)
+        if (t.y < -th*0.7){
+          col = vec3(0.65,0.58,0.42);
         }
-      }
-    }
-
-    // Edificios secundarios: 2 villas más pequeñas a los lados, simétricas
-    for (int side = 0; side < 2; side++){
-      float sx = side == 0 ? -0.55 : 0.55;
-      vec2 ds = w - vec2(sx, 0.08);
-      float vw = 0.12, vh = 0.10;
-      if (abs(ds.x) < vw && abs(ds.y) < vh){
-        bool top = ds.y < 0.0;
-        col = top ? vec3(0.78,0.30,0.20) : vec3(0.85,0.78,0.62);
-        if (abs(ds.y) < 0.004) col = vec3(0.32,0.10,0.06);
+        // columnas: 4 verticales claras
+        else if (t.y < th*0.30){
+          float colSpacing = tw * 0.45;
+          float colX = mod(t.x + tw, colSpacing);
+          // columna ancha de ~0.012, fondo oscuro entre columnas
+          col = vec3(0.42,0.32,0.18);
+          if (colX < 0.018){
+            col = vec3(0.94,0.88,0.74);
+          }
+        }
+        // arquitrabe horizontal
+        else if (t.y < th*0.45){
+          col = vec3(0.86,0.78,0.62);
+        }
+        // frontón triangular rojo
+        else {
+          float frontH = th * 0.55;
+          float frontY = (t.y - th*0.45) / frontH;
+          float frontW = tw * (1.0 - frontY);
+          if (abs(t.x) < frontW){
+            col = vec3(0.78,0.30,0.20);
+            // cumbrera oscura en el ápice
+            if (frontY > 0.92) col = vec3(0.35,0.12,0.06);
+          }
+        }
       }
     }
 
