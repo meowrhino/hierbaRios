@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba 9 · rough.js bosque denso</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#e8e3c8; overflow:hidden; font-family: ui-monospace, Menlo, monospace; color:#2a2418; }
+  svg { display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+  #overlay {
+    position: fixed; inset: 0; background: rgba(232,227,200,.92); backdrop-filter: blur(4px);
+    display: grid; place-items: center; cursor: pointer; z-index: 10; transition: opacity .4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .card { text-align:center; padding:2rem 3rem; border:2px dashed #6a5a3a; background:#f4eecc; }
+  #overlay h1 { margin:0 0 .8rem; font-size:1rem; letter-spacing:.2em; color:#3a2a14; font-family: 'Comic Sans MS', cursive; }
+  #overlay p { margin:.2rem 0; font-size:.8rem; opacity:.7; }
+  #hud { position: fixed; left:12px; bottom:10px; font-size:11px; opacity:.7; z-index:5; color:#3a2a14; }
+  #hud button { background:#f4eecc; color:#3a2a14; border:2px dashed #6a5a3a; font:inherit; padding:4px 8px; margin-left:6px; cursor:pointer; }
+  #hud button:hover { background:#ebe2b8; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="overlay">
+  <div class="card">
+    <h1>PRUEBA 9 — BOSQUE DENSO</h1>
+    <p>rough.js · sin río · clearing y estanque</p>
+    <p>click para empezar</p>
+  </div>
+</div>
+<div id="hud">
+  seed <span id="seedView">—</span>
+  <button id="reseed">nuevo seed</button>
+  <button id="mute">mute</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const PALETTE = {
+  bg:        '#e8e3c8',
+  grassLite: '#c0d99a',
+  grassMid:  '#90b86a',
+  grassDark: '#6a9a4a',
+  pondLite:  '#a7d6e8',
+  pondDeep:  '#5f8aa6',
+  treeLeaf1: '#2c5e22',
+  treeLeaf2: '#1a4416',
+  treeLeaf3: '#477e34',
+  trunk:     '#5a3a1c',
+  mushroom:  '#c8444a',
+  mushTop:   '#f0eedf',
+  log:       '#6a4a2a',
+  flowerW:   '#fffaef',
+  flowerY:   '#ecca48',
+  ink:       '#2a2418',
+};
+function mulberry32(seed){ let s=seed>>>0; return () => { s=(s+0x6D2B79F5)|0; let t=s; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
+function makeNoise2D(seed){
+  const grad3 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  const p = new Uint8Array(256); for (let i=0;i<256;i++) p[i]=i;
+  const r = mulberry32(seed);
+  for (let i=255;i>0;i--){ const j=Math.floor(r()*(i+1)); const x=p[i]; p[i]=p[j]; p[j]=x; }
+  const perm=new Uint8Array(512), pm=new Uint8Array(512);
+  for (let i=0;i<512;i++){ perm[i]=p[i&255]; pm[i]=perm[i]&7; }
+  const F2=.5*(Math.sqrt(3)-1), G2=(3-Math.sqrt(3))/6;
+  return (xin,yin) => {
+    const sk=(xin+yin)*F2;
+    const i=Math.floor(xin+sk), j=Math.floor(yin+sk);
+    const t=(i+j)*G2, X0=i-t, Y0=j-t;
+    const x0=xin-X0, y0=yin-Y0;
+    let i1,j1; if (x0>y0){i1=1;j1=0;} else {i1=0;j1=1;}
+    const x1=x0-i1+G2, y1=y0-j1+G2;
+    const x2=x0-1+2*G2, y2=y0-1+2*G2;
+    const ii=i&255, jj=j&255;
+    const g0=pm[ii+perm[jj]], g1=pm[ii+i1+perm[jj+j1]], g2=pm[ii+1+perm[jj+1]];
+    let n0=0,n1=0,n2=0;
+    let tt=.5-x0*x0-y0*y0; if (tt>=0){ tt*=tt; n0=tt*tt*(grad3[g0][0]*x0+grad3[g0][1]*y0); }
+    tt=.5-x1*x1-y1*y1; if (tt>=0){ tt*=tt; n1=tt*tt*(grad3[g1][0]*x1+grad3[g1][1]*y1); }
+    tt=.5-x2*x2-y2*y2; if (tt>=0){ tt*=tt; n2=tt*tt*(grad3[g2][0]*x2+grad3[g2][1]*y2); }
+    return 70*(n0+n1+n2);
+  };
+}
+function fbm(n,x,y,oct=4){ let v=0,a=1,f=1,s=0; for(let i=0;i<oct;i++){ v+=a*n(x*f,y*f); s+=a; a*=0.5; f*=2.02; } return v/s; }
+
+let currentSeed = Math.floor(Math.random()*1e6);
+
+function build(seed){
+  currentSeed = seed >>> 0;
+  document.getElementById('seedView').textContent = currentSeed;
+  const W = window.innerWidth, H = window.innerHeight;
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  root.appendChild(svg);
+  const rc = rough.svg(svg, { options: { roughness: 1.7, bowing: 1.5, seed: currentSeed % 0x7fffffff } });
+  const noise = makeNoise2D(currentSeed);
+  const noise2 = makeNoise2D(currentSeed ^ 0xabc12);
+  const rng = mulberry32(currentSeed ^ 0xdef34);
+
+  // Base
+  const bg = document.createElementNS(SVG_NS, 'rect');
+  bg.setAttribute('width', W); bg.setAttribute('height', H); bg.setAttribute('fill', PALETTE.bg);
+  svg.appendChild(bg);
+
+  // 1) light grass wash everywhere
+  svg.appendChild(rc.rectangle(0, 0, W, H, {
+    fill: PALETTE.grassLite, fillStyle: 'cross-hatch', hachureGap: 7, hachureAngle: 30,
+    stroke: 'transparent', fillWeight: 1.0,
+  }));
+
+  // 2) mid grass clusters
+  function blobShape(cx, cy, R, irreg=0.4, points=14, seedShift=0){
+    const pts = [];
+    for (let i=0;i<points;i++){
+      const a = (i/points)*Math.PI*2;
+      const r = R * (1 - irreg*0.5 + fbm(noise2, cx*0.005 + Math.cos(a)*0.5 + seedShift, cy*0.005 + Math.sin(a)*0.5) * irreg);
+      pts.push([cx + Math.cos(a)*r, cy + Math.sin(a)*r]);
+    }
+    return pts;
+  }
+  for (let k=0;k<14;k++){
+    const x = rng()*W, y = rng()*H;
+    const r = 70 + rng()*100;
+    svg.appendChild(rc.polygon(blobShape(x, y, r, 0.55, 16, k*0.3), {
+      fill: PALETTE.grassMid, fillStyle: 'hachure', hachureGap: 5, hachureAngle: 30 + k*9,
+      stroke: PALETTE.ink, strokeWidth: 1.0, roughness: 2.0, fillWeight: 1.3,
+    }));
+  }
+  // dark grass clusters (mostly under tree areas)
+  for (let k=0;k<8;k++){
+    const x = rng()*W, y = rng()*H;
+    const r = 40 + rng()*80;
+    svg.appendChild(rc.polygon(blobShape(x, y, r, 0.6, 14, 50+k*0.5), {
+      fill: PALETTE.grassDark, fillStyle: 'zigzag', hachureGap: 4, hachureAngle: -30 + k*9,
+      stroke: PALETTE.ink, strokeWidth: 0.9, roughness: 2.1, fillWeight: 1.4,
+    }));
+  }
+
+  // 3) small pond in a random location (not at edges)
+  const pondX = lerp(W*0.25, W*0.75, rng());
+  const pondY = lerp(H*0.25, H*0.75, rng());
+  const pondR = 60 + rng()*70;
+  // shore
+  svg.appendChild(rc.polygon(blobShape(pondX, pondY, pondR*1.25, 0.45, 16, 99), {
+    fill: '#dac88a', fillStyle: 'solid', stroke: '#9a8458', strokeWidth: 1.4, roughness: 2.2,
+  }));
+  // water
+  svg.appendChild(rc.polygon(blobShape(pondX, pondY, pondR, 0.35, 16, 88), {
+    fill: PALETTE.pondLite, fillStyle: 'cross-hatch', hachureGap: 4, hachureAngle: 45,
+    stroke: PALETTE.pondDeep, strokeWidth: 1.4, roughness: 2.0, fillWeight: 1.2,
+  }));
+  // hand-drawn wavelets
+  for (let i=0;i<6;i++){
+    const a = rng()*Math.PI*2;
+    const r = pondR*0.4*Math.sqrt(rng());
+    const wx = pondX + Math.cos(a)*r, wy = pondY + Math.sin(a)*r;
+    const wave = document.createElementNS(SVG_NS, 'path');
+    wave.setAttribute('d', `M ${wx-6} ${wy} q 3 -3 5 0 q 3 3 5 0`);
+    wave.setAttribute('stroke', PALETTE.pondDeep);
+    wave.setAttribute('stroke-width', '1.4');
+    wave.setAttribute('fill', 'none');
+    wave.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(wave);
+  }
+
+  // helper: distance to pond
+  function farFromPond(x, y, margin=20){
+    const dx = x - pondX, dy = y - pondY;
+    return Math.sqrt(dx*dx + dy*dy) > pondR + margin;
+  }
+
+  // 4) Dense forest of trees + bushes
+  function drawTree(cx, cy, size, palette){
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.appendChild(rc.ellipse(cx, cy + size*0.6, size*1.4, size*0.3, {
+      fill: 'rgba(0,0,0,.22)', fillStyle: 'solid', stroke: 'transparent', roughness: 1.0,
+    }));
+    g.appendChild(rc.rectangle(cx - size*0.10, cy + size*0.05, size*0.20, size*0.55, {
+      fill: PALETTE.trunk, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 1.4, roughness: 1.8,
+    }));
+    g.appendChild(rc.circle(cx - size*0.25, cy - size*0.05, size*0.9, {
+      fill: palette[0], fillStyle: 'hachure', hachureGap: 3, hachureAngle: 60, stroke: PALETTE.ink, strokeWidth: 1.4, roughness: 2.0, fillWeight: 1.2,
+    }));
+    g.appendChild(rc.circle(cx + size*0.25, cy - size*0.05, size*0.9, {
+      fill: palette[1], fillStyle: 'hachure', hachureGap: 3, hachureAngle: -45, stroke: PALETTE.ink, strokeWidth: 1.4, roughness: 2.0, fillWeight: 1.2,
+    }));
+    g.appendChild(rc.circle(cx, cy - size*0.5, size*0.95, {
+      fill: palette[2], fillStyle: 'hachure', hachureGap: 3, hachureAngle: 30, stroke: PALETTE.ink, strokeWidth: 1.4, roughness: 2.0, fillWeight: 1.2,
+    }));
+    return g;
+  }
+  function drawConifer(cx, cy, size){
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.appendChild(rc.ellipse(cx, cy + size*0.6, size*1.0, size*0.22, {
+      fill: 'rgba(0,0,0,.22)', fillStyle: 'solid', stroke: 'transparent', roughness: 1.0,
+    }));
+    g.appendChild(rc.rectangle(cx - size*0.08, cy + size*0.05, size*0.16, size*0.45, {
+      fill: PALETTE.trunk, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.7,
+    }));
+    // 3 layered triangles
+    for (let layer=0;layer<3;layer++){
+      const lyOff = size * 0.32 * layer;
+      const layerSize = size * (1 - layer * 0.18);
+      g.appendChild(rc.polygon([
+        [cx - layerSize*0.5, cy - lyOff],
+        [cx + layerSize*0.5, cy - lyOff],
+        [cx, cy - layerSize - lyOff],
+      ], {
+        fill: layer === 0 ? PALETTE.treeLeaf2 : (layer === 1 ? PALETTE.treeLeaf1 : PALETTE.treeLeaf3),
+        fillStyle: 'cross-hatch', hachureGap: 3, hachureAngle: 60 + layer*30,
+        stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.8, fillWeight: 1.1,
+      }));
+    }
+    return g;
+  }
+  function drawBush(cx, cy, size){
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.appendChild(rc.ellipse(cx, cy + size*0.25, size*1.4, size*0.25, {
+      fill: 'rgba(0,0,0,.18)', fillStyle: 'solid', stroke: 'transparent', roughness: 1.0,
+    }));
+    g.appendChild(rc.circle(cx-size*0.3, cy, size*0.7, {
+      fill: PALETTE.treeLeaf2, fillStyle: 'cross-hatch', hachureGap: 3, stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.8, fillWeight: 1.1,
+    }));
+    g.appendChild(rc.circle(cx+size*0.3, cy, size*0.7, {
+      fill: PALETTE.treeLeaf3, fillStyle: 'cross-hatch', hachureGap: 3, stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.8, fillWeight: 1.1,
+    }));
+    return g;
+  }
+  function drawMushroom(cx, cy, size){
+    const g = document.createElementNS(SVG_NS, 'g');
+    // stem
+    g.appendChild(rc.rectangle(cx - size*0.15, cy - size*0.2, size*0.3, size*0.5, {
+      fill: PALETTE.mushTop, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 1.0, roughness: 1.5,
+    }));
+    // cap
+    g.appendChild(rc.ellipse(cx, cy - size*0.25, size*1.0, size*0.6, {
+      fill: PALETTE.mushroom, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.7,
+    }));
+    // spots
+    g.appendChild(rc.circle(cx - size*0.2, cy - size*0.35, size*0.15, {
+      fill: PALETTE.mushTop, fillStyle: 'solid', stroke: 'transparent', roughness: 1.2,
+    }));
+    g.appendChild(rc.circle(cx + size*0.18, cy - size*0.25, size*0.12, {
+      fill: PALETTE.mushTop, fillStyle: 'solid', stroke: 'transparent', roughness: 1.2,
+    }));
+    return g;
+  }
+  function drawLog(cx, cy, size){
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.appendChild(rc.ellipse(cx, cy + size*0.2, size*1.8, size*0.35, {
+      fill: 'rgba(0,0,0,.22)', fillStyle: 'solid', stroke: 'transparent', roughness: 1.0,
+    }));
+    g.appendChild(rc.rectangle(cx - size, cy - size*0.25, size*2, size*0.5, {
+      fill: PALETTE.log, fillStyle: 'cross-hatch', hachureGap: 3, hachureAngle: 0,
+      stroke: PALETTE.ink, strokeWidth: 1.3, roughness: 1.8,
+    }));
+    // ring at one end
+    g.appendChild(rc.circle(cx - size, cy, size*0.4, {
+      fill: '#9a7a4a', fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.6,
+    }));
+    g.appendChild(rc.circle(cx - size, cy, size*0.2, {
+      fill: 'transparent', stroke: PALETTE.ink, strokeWidth: 1.0, roughness: 1.6,
+    }));
+    return g;
+  }
+  function drawFlower(cx, cy, size, col){
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.appendChild(rc.line(cx, cy, cx + (rng()-.5)*size*0.3, cy + size*1.1, {
+      stroke: PALETTE.grassDark, strokeWidth: 1.0, roughness: 1.4,
+    }));
+    for (let i=0;i<5;i++){
+      const a = (i/5)*Math.PI*2;
+      const r = size*0.4;
+      g.appendChild(rc.circle(cx + Math.cos(a)*r*0.6, cy + Math.sin(a)*r*0.6, r, {
+        fill: col, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 0.8, roughness: 1.4,
+      }));
+    }
+    g.appendChild(rc.circle(cx, cy, size*0.3, { fill: PALETTE.flowerY, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 0.8, roughness: 1.2 }));
+    return g;
+  }
+
+  // placement with poisson-ish rejection
+  const placed = [];
+  function tryPlace(minDist, x, y){
+    for (const q of placed){
+      const dx = q.x - x, dy = q.y - y;
+      if (dx*dx + dy*dy < minDist*minDist) return false;
+    }
+    placed.push({x, y}); return true;
+  }
+
+  // logs (rare, big)
+  for (let i=0;i<3;i++){
+    let x, y, ok = false;
+    for (let a=0;a<60 && !ok;a++){
+      x = rng()*W; y = rng()*H;
+      if (!farFromPond(x, y, 40)) continue;
+      if (!tryPlace(110, x, y)) continue;
+      ok = true;
+    }
+    if (ok) svg.appendChild(drawLog(x, y, 22 + rng()*10));
+  }
+
+  // dense trees (mix of broadleaf and conifer)
+  for (let attempts=0; attempts<8000 && placed.length<260; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!farFromPond(x, y, 30)) continue;
+    if (!tryPlace(38, x, y)) continue;
+    const size = 22 + rng()*30;
+    if (rng() < 0.4){
+      svg.appendChild(drawConifer(x, y, size * 1.1));
+    } else {
+      const pal = rng() < 0.5 ? [PALETTE.treeLeaf1, PALETTE.treeLeaf2, PALETTE.treeLeaf3] : [PALETTE.treeLeaf2, PALETTE.treeLeaf1, PALETTE.treeLeaf3];
+      svg.appendChild(drawTree(x, y, size, pal));
+    }
+  }
+  // bushes filling gaps
+  for (let attempts=0; attempts<3000 && placed.length<360; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!farFromPond(x, y, 22)) continue;
+    if (!tryPlace(22, x, y)) continue;
+    svg.appendChild(drawBush(x, y, 11 + rng()*9));
+  }
+  // mushrooms (rare, near trees)
+  for (let attempts=0;attempts<1500 && placed.length<400; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!farFromPond(x, y, 30)) continue;
+    if (!tryPlace(28, x, y)) continue;
+    if (rng() > 0.3) continue;
+    svg.appendChild(drawMushroom(x, y, 8 + rng()*6));
+  }
+  // flowers scattered in clearings
+  for (let attempts=0;attempts<3500 && placed.length<540; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!farFromPond(x, y, 16)) continue;
+    if (!tryPlace(16, x, y)) continue;
+    if (rng() > 0.4) continue;
+    const c = rng();
+    const col = c<.5 ? PALETTE.flowerW : PALETTE.flowerY;
+    svg.appendChild(drawFlower(x, y, 5 + rng()*3, col));
+  }
+}
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+build(currentSeed);
+let resizeTO=null;
+window.addEventListener('resize', () => { clearTimeout(resizeTO); resizeTO = setTimeout(() => build(currentSeed), 150); });
+document.getElementById('reseed').addEventListener('click', () => build(Math.floor(Math.random()*1e6)));
+
+/* Audio: deep forest — owl hoots, light wind, rustling */
+class Ambient {
+  constructor(){ this.ac=null; this.master=null; this.muted=false; }
+  start(){
+    if (this.ac) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ac = new AC(); const ac = this.ac;
+    this.master = ac.createGain(); this.master.gain.value=0;
+    this.master.connect(ac.destination);
+    this.master.gain.linearRampToValueAtTime(.5, ac.currentTime+1.2);
+    const bs = 2 * ac.sampleRate;
+    // soft wind
+    const wb = ac.createBuffer(1, bs, ac.sampleRate); const wd = wb.getChannelData(0);
+    let b0=0,b1=0,b2=0;
+    for (let i=0;i<bs;i++){ const w=Math.random()*2-1; b0=0.99765*b0+w*0.099046; b1=0.96300*b1+w*0.296516; b2=0.57000*b2+w*1.052691; wd[i]=(b0+b1+b2+w*0.1848)*0.07; }
+    const wsrc = ac.createBufferSource(); wsrc.buffer=wb; wsrc.loop=true;
+    const wlp = ac.createBiquadFilter(); wlp.type='lowpass'; wlp.frequency.value=480;
+    const wg = ac.createGain(); wg.gain.value=.22;
+    wsrc.connect(wlp).connect(wg).connect(this.master); wsrc.start();
+    // periodic owl hoots
+    const owl = () => {
+      if (!this.ac) return;
+      if (!this.muted){
+        const t = ac.currentTime;
+        // "hoo... hoo-hoo"
+        const sched = [[0, 380], [0.55, 380], [0.75, 340]];
+        for (const [dt, f] of sched){
+          const o = ac.createOscillator(); o.type='sine';
+          o.frequency.setValueAtTime(f, t+dt);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0, t+dt);
+          g.gain.linearRampToValueAtTime(.07, t+dt+.04);
+          g.gain.exponentialRampToValueAtTime(.0001, t+dt+.30);
+          // slight tremolo
+          const trem = ac.createOscillator(); trem.frequency.value=5;
+          const tremG = ac.createGain(); tremG.gain.value = 0.015;
+          trem.connect(tremG).connect(o.frequency); trem.start(t+dt); trem.stop(t+dt+.3);
+          o.connect(g).connect(this.master);
+          o.start(t+dt); o.stop(t+dt+.32);
+        }
+      }
+      setTimeout(owl, 9000 + Math.random()*9000);
+    };
+    setTimeout(owl, 4000);
+    // light bird chirps in distance
+    const bird = () => {
+      if (!this.ac) return;
+      if (!this.muted){
+        const t = ac.currentTime;
+        const base = 1700 + Math.random()*1400;
+        const notes = 2 + Math.floor(Math.random()*3);
+        for (let k=0;k<notes;k++){
+          const t2 = t + k*0.12;
+          const o = ac.createOscillator(); o.type='sine';
+          const f = base * (0.9 + Math.random()*0.4);
+          o.frequency.setValueAtTime(f, t2);
+          o.frequency.exponentialRampToValueAtTime(f*1.3, t2+.04);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0, t2);
+          g.gain.linearRampToValueAtTime(.035, t2+.005);
+          g.gain.exponentialRampToValueAtTime(.0001, t2+.12);
+          o.connect(g).connect(this.master);
+          o.start(t2); o.stop(t2+.13);
+        }
+      }
+      setTimeout(bird, 4500 + Math.random()*5500);
+    };
+    setTimeout(bird, 3000);
+  }
+  toggleMute(){ if(!this.ac)return; this.muted=!this.muted; this.master.gain.cancelScheduledValues(this.ac.currentTime); this.master.gain.linearRampToValueAtTime(this.muted?0:.5, this.ac.currentTime+.4); }
+}
+const ambient = new Ambient();
+const overlay = document.getElementById('overlay');
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); ambient.start(); });
+document.getElementById('mute').addEventListener('click', e => { ambient.toggleMute(); e.target.textContent = ambient.muted ? 'unmute' : 'mute'; });
+</script>
+</body>
+</html>

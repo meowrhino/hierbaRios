@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba 10 · rough.js nocturno</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#0c1024; overflow:hidden; font-family: ui-monospace, Menlo, monospace; color:#c8d4ee; }
+  svg { display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+  #fireflies { position:fixed; inset:0; width:100vw; height:100vh; pointer-events:none; z-index:3; mix-blend-mode: screen; }
+  #overlay {
+    position: fixed; inset: 0; background: rgba(8,12,28,.94); backdrop-filter: blur(4px);
+    display: grid; place-items: center; cursor: pointer; z-index: 20; transition: opacity .4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .card { text-align:center; padding:2rem 3rem; border:2px dashed #4a5a8a; background:#101a3a; }
+  #overlay h1 { margin:0 0 .8rem; font-size:1rem; letter-spacing:.2em; color:#cad8f4; font-family: 'Comic Sans MS', cursive; }
+  #overlay p { margin:.2rem 0; font-size:.8rem; opacity:.7; }
+  #hud { position: fixed; left:12px; bottom:10px; font-size:11px; opacity:.7; z-index:10; color:#cad8f4; }
+  #hud button { background:#101a3a; color:#cad8f4; border:2px dashed #4a5a8a; font:inherit; padding:4px 8px; margin-left:6px; cursor:pointer; }
+  #hud button:hover { background:#152448; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<canvas id="fireflies"></canvas>
+<div id="overlay">
+  <div class="card">
+    <h1>PRUEBA 10 — NOCTURNO</h1>
+    <p>rough.js · luciérnagas · linternas</p>
+    <p>click para empezar</p>
+  </div>
+</div>
+<div id="hud">
+  seed <span id="seedView">—</span>
+  <button id="reseed">nuevo seed</button>
+  <button id="mute">mute</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const PALETTE = {
+  bg:         '#0c1024',
+  bgMid:      '#161e3e',
+  grassDk:    '#1e3826',
+  grassMid:   '#2a4e34',
+  grassLite:  '#3d6e44',
+  pondDk:     '#1a2c4a',
+  pondLite:   '#2e4e7a',
+  pondGlow:   '#a7c4ee',
+  treeDk:     '#0e1a14',
+  treeMid:    '#1a3622',
+  treeHi:     '#2e5236',
+  trunk:      '#1a1208',
+  lantern:    '#f4c468',
+  lanternGlow:'#f4e88a',
+  lanternPost:'#3a2818',
+  star:       '#e0e8ff',
+  moon:       '#f0eed8',
+  flowerB:    '#7088c8',
+  flowerW:    '#dde8ff',
+  ink:        '#06070f',
+  inkSoft:    '#1a2240',
+};
+function mulberry32(seed){ let s=seed>>>0; return () => { s=(s+0x6D2B79F5)|0; let t=s; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
+function makeNoise2D(seed){
+  const grad3 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  const p = new Uint8Array(256); for (let i=0;i<256;i++) p[i]=i;
+  const r = mulberry32(seed);
+  for (let i=255;i>0;i--){ const j=Math.floor(r()*(i+1)); const x=p[i]; p[i]=p[j]; p[j]=x; }
+  const perm=new Uint8Array(512), pm=new Uint8Array(512);
+  for (let i=0;i<512;i++){ perm[i]=p[i&255]; pm[i]=perm[i]&7; }
+  const F2=.5*(Math.sqrt(3)-1), G2=(3-Math.sqrt(3))/6;
+  return (xin,yin) => {
+    const sk=(xin+yin)*F2;
+    const i=Math.floor(xin+sk), j=Math.floor(yin+sk);
+    const t=(i+j)*G2, X0=i-t, Y0=j-t;
+    const x0=xin-X0, y0=yin-Y0;
+    let i1,j1; if (x0>y0){i1=1;j1=0;} else {i1=0;j1=1;}
+    const x1=x0-i1+G2, y1=y0-j1+G2;
+    const x2=x0-1+2*G2, y2=y0-1+2*G2;
+    const ii=i&255, jj=j&255;
+    const g0=pm[ii+perm[jj]], g1=pm[ii+i1+perm[jj+j1]], g2=pm[ii+1+perm[jj+1]];
+    let n0=0,n1=0,n2=0;
+    let tt=.5-x0*x0-y0*y0; if (tt>=0){ tt*=tt; n0=tt*tt*(grad3[g0][0]*x0+grad3[g0][1]*y0); }
+    tt=.5-x1*x1-y1*y1; if (tt>=0){ tt*=tt; n1=tt*tt*(grad3[g1][0]*x1+grad3[g1][1]*y1); }
+    tt=.5-x2*x2-y2*y2; if (tt>=0){ tt*=tt; n2=tt*tt*(grad3[g2][0]*x2+grad3[g2][1]*y2); }
+    return 70*(n0+n1+n2);
+  };
+}
+function fbm(n,x,y,oct=4){ let v=0,a=1,f=1,s=0; for(let i=0;i<oct;i++){ v+=a*n(x*f,y*f); s+=a; a*=0.5; f*=2.02;} return v/s; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+let currentSeed = Math.floor(Math.random()*1e6);
+let lanterns = [];
+
+function build(seed){
+  currentSeed = seed >>> 0;
+  document.getElementById('seedView').textContent = currentSeed;
+  const W = window.innerWidth, H = window.innerHeight;
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  root.appendChild(svg);
+  const rc = rough.svg(svg, { options: { roughness: 1.7, bowing: 1.4, seed: currentSeed % 0x7fffffff } });
+  const noise = makeNoise2D(currentSeed);
+  const noise2 = makeNoise2D(currentSeed ^ 0xabc12);
+  const rng = mulberry32(currentSeed ^ 0xdef34);
+
+  // dark base — gradient
+  const gradDef = document.createElementNS(SVG_NS, 'defs');
+  gradDef.innerHTML = `
+    <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f8f4d8" stop-opacity="0.7"/>
+      <stop offset="55%" stop-color="#f8f4d8" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#f8f4d8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lanternGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff0a0" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="#fcd06a" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#fcd06a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pondGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#a7c4ee" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#a7c4ee" stop-opacity="0"/>
+    </radialGradient>
+  `;
+  svg.appendChild(gradDef);
+
+  const bg = document.createElementNS(SVG_NS, 'rect');
+  bg.setAttribute('width', W); bg.setAttribute('height', H);
+  bg.setAttribute('fill', PALETTE.bg);
+  svg.appendChild(bg);
+
+  // some "stars" as tiny dots (visible from very high)
+  for (let k=0;k<160;k++){
+    const x = rng()*W, y = rng()*H;
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+    dot.setAttribute('r', rng() < 0.05 ? 1.4 : 0.6);
+    dot.setAttribute('fill', PALETTE.star);
+    dot.setAttribute('opacity', (0.2 + rng()*0.6).toFixed(2));
+    svg.appendChild(dot);
+  }
+
+  // soft moon glow somewhere
+  const moonX = lerp(W*0.15, W*0.85, rng());
+  const moonY = lerp(H*0.10, H*0.45, rng());
+  const moonR = 80 + rng()*60;
+  const moonGlowRect = document.createElementNS(SVG_NS, 'circle');
+  moonGlowRect.setAttribute('cx', moonX); moonGlowRect.setAttribute('cy', moonY);
+  moonGlowRect.setAttribute('r', moonR*3);
+  moonGlowRect.setAttribute('fill', 'url(#moonGlow)');
+  svg.appendChild(moonGlowRect);
+
+  // grass washes (dark)
+  svg.appendChild(rc.rectangle(0, 0, W, H, {
+    fill: PALETTE.grassDk, fillStyle: 'cross-hatch', hachureGap: 7, hachureAngle: 30,
+    stroke: 'transparent', fillWeight: 1.0,
+  }));
+  function blobShape(cx, cy, R, irreg=0.4, points=14, seedShift=0){
+    const pts = [];
+    for (let i=0;i<points;i++){
+      const a = (i/points)*Math.PI*2;
+      const r = R * (1 - irreg*0.5 + fbm(noise2, cx*0.005 + Math.cos(a)*0.5 + seedShift, cy*0.005 + Math.sin(a)*0.5) * irreg);
+      pts.push([cx + Math.cos(a)*r, cy + Math.sin(a)*r]);
+    }
+    return pts;
+  }
+  for (let k=0;k<10;k++){
+    const x = rng()*W, y = rng()*H;
+    const r = 70 + rng()*120;
+    svg.appendChild(rc.polygon(blobShape(x, y, r, 0.55, 16, k*0.3), {
+      fill: PALETTE.grassMid, fillStyle: 'hachure', hachureGap: 5, hachureAngle: 60 + k*7,
+      stroke: PALETTE.inkSoft, strokeWidth: 0.9, roughness: 2.0, fillWeight: 1.2,
+    }));
+  }
+
+  // winding river
+  function makeRiverPath(){
+    const side = Math.floor(rng()*4);
+    let x, y, exitX, exitY;
+    if (side===0){ x=rng()*W; y=-10; exitX=rng()*W; exitY=H+10; }
+    else if (side===1){ x=-10; y=rng()*H; exitX=W+10; exitY=rng()*H; }
+    else if (side===2){ x=rng()*W; y=H+10; exitX=rng()*W; exitY=-10; }
+    else { x=W+10; y=rng()*H; exitX=-10; exitY=rng()*H; }
+    const path = [{x, y}];
+    let dx = exitX - x, dy = exitY - y; const d0 = Math.sqrt(dx*dx+dy*dy)||1; dx/=d0; dy/=d0;
+    let cx = x, cy = y;
+    for (let s=0;s<200;s++){
+      const n = fbm(noise, cx*0.005+1, cy*0.005-2, 3)*Math.PI*1.4;
+      const ax = Math.cos(n)*0.7 + dx*0.3;
+      const ay = Math.sin(n)*0.7 + dy*0.3;
+      const m = Math.sqrt(ax*ax+ay*ay)||1;
+      cx += (ax/m)*14; cy += (ay/m)*14;
+      path.push({x: cx, y: cy});
+      if (cx<-20||cy<-20||cx>W+20||cy>H+20) break;
+    }
+    return path;
+  }
+  function offsetPath(path, dist){
+    const out = [], back = [];
+    for (let i=0;i<path.length;i++){
+      const prev = path[Math.max(0,i-1)], next = path[Math.min(path.length-1,i+1)];
+      const dx = next.x - prev.x, dy = next.y - prev.y;
+      const m = Math.sqrt(dx*dx+dy*dy)||1;
+      const nx = -dy/m, ny = dx/m;
+      const j = (rng()-.5)*dist*0.5;
+      out.push([ path[i].x + nx*(dist+j), path[i].y + ny*(dist+j) ]);
+      back.push([ path[i].x - nx*(dist+j), path[i].y - ny*(dist+j) ]);
+    }
+    return out.concat(back.reverse());
+  }
+  const river = makeRiverPath();
+  if (river.length > 4){
+    // bank
+    svg.appendChild(rc.polygon(offsetPath(river, 26), {
+      fill: PALETTE.grassDk, fillStyle: 'solid', stroke: PALETTE.inkSoft, strokeWidth: 1.2, roughness: 2.0,
+    }));
+    svg.appendChild(rc.polygon(offsetPath(river, 18), {
+      fill: PALETTE.pondDk, fillStyle: 'cross-hatch', hachureGap: 4, hachureAngle: 45,
+      stroke: PALETTE.pondLite, strokeWidth: 1.4, roughness: 2.0, fillWeight: 1.1,
+    }));
+    // moon reflection ripples (light wavelets where moon glow overlaps river)
+    for (let i=0;i<river.length;i+=3){
+      const p = river[i];
+      const dx = p.x - moonX, dy = p.y - moonY;
+      const d = Math.sqrt(dx*dx + dy*dy);
+      if (d > moonR*2.5) continue;
+      const alpha = 1 - (d/(moonR*2.5));
+      const wave = document.createElementNS(SVG_NS, 'path');
+      wave.setAttribute('d', `M ${p.x-5+ (rng()-.5)*4} ${p.y + (rng()-.5)*4} q 3 -3 5 0 q 3 3 5 0`);
+      wave.setAttribute('stroke', PALETTE.pondGlow);
+      wave.setAttribute('stroke-width', '1.4');
+      wave.setAttribute('opacity', alpha.toFixed(2));
+      wave.setAttribute('fill', 'none');
+      wave.setAttribute('stroke-linecap', 'round');
+      svg.appendChild(wave);
+    }
+  }
+
+  // trees (silhouettes with subtle moon-lit highlights)
+  function drawTree(cx, cy, size){
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.appendChild(rc.ellipse(cx, cy + size*0.6, size*1.4, size*0.3, {
+      fill: '#06070d', fillStyle: 'solid', stroke: 'transparent', roughness: 1.0,
+    }));
+    g.appendChild(rc.rectangle(cx - size*0.10, cy + size*0.05, size*0.20, size*0.55, {
+      fill: PALETTE.trunk, fillStyle: 'solid', stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.6,
+    }));
+    g.appendChild(rc.circle(cx - size*0.25, cy - size*0.05, size*0.9, {
+      fill: PALETTE.treeDk, fillStyle: 'hachure', hachureGap: 3, hachureAngle: 60, stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.9, fillWeight: 1.2,
+    }));
+    g.appendChild(rc.circle(cx + size*0.25, cy - size*0.05, size*0.9, {
+      fill: PALETTE.treeMid, fillStyle: 'hachure', hachureGap: 3, hachureAngle: -45, stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.9, fillWeight: 1.2,
+    }));
+    g.appendChild(rc.circle(cx, cy - size*0.5, size*0.95, {
+      fill: PALETTE.treeMid, fillStyle: 'hachure', hachureGap: 3, hachureAngle: 30, stroke: PALETTE.ink, strokeWidth: 1.2, roughness: 1.9, fillWeight: 1.2,
+    }));
+    // moon highlight: if near moon, add a small bright accent
+    const dx = cx - moonX, dy = cy - moonY;
+    if (dx*dx + dy*dy < (moonR*2.2)*(moonR*2.2)){
+      g.appendChild(rc.circle(cx - size*0.35, cy - size*0.65, size*0.25, {
+        fill: PALETTE.treeHi, fillStyle: 'solid', stroke: 'transparent', roughness: 1.3,
+      }));
+    }
+    return g;
+  }
+
+  function awayFromRiver(x, y, margin){
+    if (!river || river.length < 2) return true;
+    let minD = Infinity;
+    for (let i=0;i<river.length;i+=2){
+      const dx = river[i].x - x, dy = river[i].y - y;
+      const d = dx*dx + dy*dy;
+      if (d < minD) minD = d;
+    }
+    return Math.sqrt(minD) > margin;
+  }
+
+  const placed = [];
+  function tryPlace(minDist, x, y){
+    for (const q of placed){
+      const dx = q.x - x, dy = q.y - y;
+      if (dx*dx + dy*dy < minDist*minDist) return false;
+    }
+    placed.push({x, y}); return true;
+  }
+
+  // trees
+  for (let attempts=0; attempts<5000 && placed.length<150; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!awayFromRiver(x, y, 40)) continue;
+    if (!tryPlace(48, x, y)) continue;
+    svg.appendChild(drawTree(x, y, 22 + rng()*25));
+  }
+
+  // lantern posts (random clustering near edges / path)
+  lanterns = [];
+  for (let attempts=0; attempts<400 && lanterns.length<10; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!awayFromRiver(x, y, 30)) continue;
+    if (!tryPlace(70, x, y)) continue;
+    lanterns.push({x, y});
+    // post
+    svg.appendChild(rc.line(x, y, x, y - 28, {
+      stroke: PALETTE.lanternPost, strokeWidth: 2.4, roughness: 1.6,
+    }));
+    // lantern body
+    svg.appendChild(rc.rectangle(x - 7, y - 38, 14, 12, {
+      fill: PALETTE.lantern, fillStyle: 'solid', stroke: PALETTE.lanternPost, strokeWidth: 1.4, roughness: 1.4,
+    }));
+    // glow
+    const glow = document.createElementNS(SVG_NS, 'circle');
+    glow.setAttribute('cx', x); glow.setAttribute('cy', y - 32);
+    glow.setAttribute('r', '60');
+    glow.setAttribute('fill', 'url(#lanternGlow)');
+    svg.appendChild(glow);
+  }
+
+  // small flowers (night colors)
+  for (let attempts=0; attempts<2000 && placed.length<260; attempts++){
+    const x = rng()*W, y = rng()*H;
+    if (!awayFromRiver(x, y, 16)) continue;
+    if (!tryPlace(18, x, y)) continue;
+    if (rng() > 0.4) continue;
+    const c = rng() < 0.5 ? PALETTE.flowerB : PALETTE.flowerW;
+    const flower = document.createElementNS(SVG_NS, 'g');
+    flower.appendChild(rc.circle(x, y, 3.5, {
+      fill: c, fillStyle: 'solid', stroke: PALETTE.inkSoft, strokeWidth: 0.6, roughness: 1.4,
+    }));
+    svg.appendChild(flower);
+  }
+}
+
+build(currentSeed);
+let resizeTO=null;
+window.addEventListener('resize', () => { clearTimeout(resizeTO); resizeTO = setTimeout(() => { build(currentSeed); resetFireflies(); }, 150); });
+document.getElementById('reseed').addEventListener('click', () => { build(Math.floor(Math.random()*1e6)); resetFireflies(); });
+
+/* ---------- Fireflies on canvas overlay ---------- */
+const ff = document.getElementById('fireflies');
+const ffCtx = ff.getContext('2d');
+function fitFF(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ff.width = Math.ceil(window.innerWidth * dpr);
+  ff.height = Math.ceil(window.innerHeight * dpr);
+  ff.style.width = window.innerWidth + 'px';
+  ff.style.height = window.innerHeight + 'px';
+  ffCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+fitFF();
+let fireflies = [];
+function resetFireflies(){
+  fitFF();
+  fireflies = [];
+  const W = window.innerWidth, H = window.innerHeight;
+  for (let k=0; k<60; k++){
+    fireflies.push({
+      x: Math.random()*W, y: Math.random()*H,
+      vx: (Math.random()-0.5)*0.4, vy: (Math.random()-0.5)*0.4,
+      ph: Math.random()*Math.PI*2, sp: 1.5 + Math.random()*1.5,
+    });
+  }
+}
+resetFireflies();
+function drawFireflies(t){
+  const W = window.innerWidth, H = window.innerHeight;
+  ffCtx.clearRect(0,0,W,H);
+  for (const f of fireflies){
+    f.x += f.vx; f.y += f.vy;
+    // slight random walk
+    f.vx += (Math.random()-0.5)*0.04; f.vy += (Math.random()-0.5)*0.04;
+    f.vx *= 0.96; f.vy *= 0.96;
+    if (f.x < -20) f.x = W+20; if (f.x > W+20) f.x = -20;
+    if (f.y < -20) f.y = H+20; if (f.y > H+20) f.y = -20;
+    const phase = (Math.sin(t*f.sp + f.ph) + 1)/2;
+    if (phase < 0.3) continue;
+    const intensity = phase;
+    const r = 8 * intensity;
+    const grad = ffCtx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
+    grad.addColorStop(0, `rgba(240, 240, 130, ${intensity})`);
+    grad.addColorStop(0.6, `rgba(160, 200, 90, ${intensity*0.4})`);
+    grad.addColorStop(1, 'rgba(160, 200, 90, 0)');
+    ffCtx.fillStyle = grad;
+    ffCtx.beginPath(); ffCtx.arc(f.x, f.y, r, 0, Math.PI*2); ffCtx.fill();
+    ffCtx.fillStyle = '#fff';
+    ffCtx.fillRect(f.x - 0.5, f.y - 0.5, 1.5, 1.5);
+  }
+}
+let t0 = performance.now();
+function loop(){
+  const t = (performance.now() - t0)/1000;
+  drawFireflies(t);
+  requestAnimationFrame(loop);
+}
+loop();
+
+/* Audio: night ambience — crickets, frogs, light wind */
+class Ambient {
+  constructor(){ this.ac=null; this.master=null; this.muted=false; }
+  start(){
+    if (this.ac) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ac = new AC(); const ac = this.ac;
+    this.master = ac.createGain(); this.master.gain.value=0;
+    this.master.connect(ac.destination);
+    this.master.gain.linearRampToValueAtTime(.5, ac.currentTime+1.2);
+    const bs = 2 * ac.sampleRate;
+    // soft wind
+    const wb = ac.createBuffer(1, bs, ac.sampleRate); const wd = wb.getChannelData(0);
+    let b0=0,b1=0,b2=0;
+    for (let i=0;i<bs;i++){ const w=Math.random()*2-1; b0=0.99765*b0+w*0.099046; b1=0.96300*b1+w*0.296516; b2=0.57000*b2+w*1.052691; wd[i]=(b0+b1+b2+w*0.1848)*0.07; }
+    const wsrc = ac.createBufferSource(); wsrc.buffer=wb; wsrc.loop=true;
+    const wlp = ac.createBiquadFilter(); wlp.type='lowpass'; wlp.frequency.value=320;
+    const wg = ac.createGain(); wg.gain.value=.18;
+    wsrc.connect(wlp).connect(wg).connect(this.master); wsrc.start();
+
+    // continuous cricket chorus: many low-amplitude rapid chirps
+    const cricket = () => {
+      if (!this.ac) return;
+      if (!this.muted){
+        const t = ac.currentTime;
+        const osc = ac.createOscillator();
+        osc.type = 'triangle';
+        const f = 3000 + Math.random()*800;
+        osc.frequency.setValueAtTime(f, t);
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(.025, t+.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t+.04);
+        const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+        if (pan){ pan.pan.value = (Math.random()*2-1)*0.8; osc.connect(g).connect(pan).connect(this.master); }
+        else osc.connect(g).connect(this.master);
+        osc.start(t); osc.stop(t+.05);
+      }
+      setTimeout(cricket, 70 + Math.random()*180);
+    };
+    setTimeout(cricket, 300);
+
+    // occasional frog croak
+    const frog = () => {
+      if (!this.ac) return;
+      if (!this.muted){
+        const t = ac.currentTime;
+        const o = ac.createOscillator(); o.type='sawtooth';
+        o.frequency.setValueAtTime(120, t);
+        o.frequency.exponentialRampToValueAtTime(70, t+0.12);
+        const f = ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=400;
+        const g = ac.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(.10, t+.02);
+        g.gain.exponentialRampToValueAtTime(.0001, t+.18);
+        o.connect(f).connect(g).connect(this.master);
+        o.start(t); o.stop(t+.20);
+      }
+      setTimeout(frog, 4500 + Math.random()*6500);
+    };
+    setTimeout(frog, 2200);
+  }
+  toggleMute(){ if(!this.ac)return; this.muted=!this.muted; this.master.gain.cancelScheduledValues(this.ac.currentTime); this.master.gain.linearRampToValueAtTime(this.muted?0:.5, this.ac.currentTime+.4); }
+}
+const ambient = new Ambient();
+const overlay = document.getElementById('overlay');
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); ambient.start(); });
+document.getElementById('mute').addEventListener('click', e => { ambient.toggleMute(); e.target.textContent = ambient.muted ? 'unmute' : 'mute'; });
+</script>
+</body>
+</html>

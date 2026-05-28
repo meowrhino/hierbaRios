@@ -15,14 +15,8 @@
   #overlay .card { text-align: center; padding: 2rem 3rem; border: 1px solid #3a5a3a; background: #0e140e; }
   #overlay h1 { margin: 0 0 .8rem; font-size: 1rem; letter-spacing: .2em; }
   #overlay p  { margin: .2rem 0; font-size: .8rem; opacity: .7; }
-  #hud {
-    position: fixed; left: 12px; bottom: 10px; font-size: 11px; opacity: .55; z-index: 5;
-    text-shadow: 0 1px 0 #000;
-  }
-  #hud button {
-    background: #0e140e; color: #e8f0d8; border: 1px solid #3a5a3a;
-    font: inherit; padding: 4px 8px; margin-left: 6px; cursor: pointer;
-  }
+  #hud { position: fixed; left: 12px; bottom: 10px; font-size: 11px; opacity: .55; z-index: 5; text-shadow: 0 1px 0 #000; }
+  #hud button { background: #0e140e; color: #e8f0d8; border: 1px solid #3a5a3a; font: inherit; padding: 4px 8px; margin-left: 6px; cursor: pointer; }
   #hud button:hover { background: #1c2a1c; }
 </style>
 </head>
@@ -31,7 +25,7 @@
 <div id="overlay">
   <div class="card">
     <h1>PRUEBA 1 — PIXEL ISO</h1>
-    <p>canvas 2d · tiles isométricos · audio procedural</p>
+    <p>canvas 2d · tiles isométricos · agua animada</p>
     <p>click para empezar</p>
   </div>
 </div>
@@ -42,12 +36,11 @@
 </div>
 
 <script>
-/* ---------- Simplex 2D noise (Stefan Gustavson, compacted) ---------- */
+/* ---------- Simplex 2D noise ---------- */
 function makeNoise2D(seed = 0) {
   const grad3 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
   const p = new Uint8Array(256);
   for (let i=0;i<256;i++) p[i] = i;
-  // seeded shuffle (mulberry32)
   let s = seed >>> 0;
   const rand = () => { s = (s + 0x6D2B79F5) | 0; let t = s; t = Math.imul(t ^ (t>>>15), t | 1); t ^= t + Math.imul(t ^ (t>>>7), t | 61); return ((t ^ (t>>>14)) >>> 0) / 4294967296; };
   for (let i=255;i>0;i--) { const j = Math.floor(rand()*(i+1)); const t = p[i]; p[i]=p[j]; p[j]=t; }
@@ -75,7 +68,7 @@ function makeNoise2D(seed = 0) {
     if (t1>=0){ t1*=t1; n1 = t1*t1*(grad3[gi1][0]*x1 + grad3[gi1][1]*y1); }
     let t2 = .5 - x2*x2 - y2*y2;
     if (t2>=0){ t2*=t2; n2 = t2*t2*(grad3[gi2][0]*x2 + grad3[gi2][1]*y2); }
-    return 70*(n0+n1+n2); // approx [-1,1]
+    return 70*(n0+n1+n2);
   };
 }
 function fbm(noise, x, y, octaves=4, lac=2, gain=.5){
@@ -85,7 +78,7 @@ function fbm(noise, x, y, octaves=4, lac=2, gain=.5){
 }
 function mulberry32(seed){ let s = seed>>>0; return () => { s = (s + 0x6D2B79F5)|0; let t=s; t = Math.imul(t^(t>>>15), t|1); t ^= t + Math.imul(t^(t>>>7), t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
 
-/* ---------- Palette (limited, dithered) ---------- */
+/* ---------- Palette ---------- */
 const PAL = {
   deepWater:  '#1a3a66',
   water:      '#2a5a8c',
@@ -97,35 +90,43 @@ const PAL = {
   grass3:     '#5d9b3f',
   grass4:     '#71b14a',
   grassHi:    '#86c45a',
-  shadow:     'rgba(0,0,0,.18)',
+  shadow:     'rgba(0,0,0,.35)',
   treeDark:   '#244018',
   treeMid:    '#356128',
   treeLite:   '#4d8c3a',
   trunk:      '#3a2415',
+  pineDk:     '#1a3014',
+  pineLite:   '#2c5224',
+  cherryDk:   '#c47ab0',
+  cherryMid:  '#e89ec4',
+  cherryHi:   '#f5c0d4',
+  stumpDk:    '#4a3220',
+  stumpLite:  '#7a563a',
   bushDark:   '#2f5a22',
   bushLite:   '#4d8c3a',
   flowerR:    '#d24a4a',
   flowerY:    '#f0c84a',
   flowerW:    '#e8f0d8',
+  flowerP:    '#c47ab0',
 };
 
-/* ---------- Iso tile factory ---------- */
-const TW = 32, TH = 16; // tile width/height (small for pixel feel)
+/* ---------- Iso tile ---------- */
+const TW = 32, TH = 16;
 const HTW = TW/2, HTH = TH/2;
 
-/* Draw a diamond fill with a palette stripe pattern for organic grass */
-function makeGrassTile(rng, baseTone){
-  const c = document.createElement('canvas'); c.width=TW; c.height=TH;
-  const g = c.getContext('2d');
-  // base diamond
-  g.fillStyle = baseTone;
+function fillDiamond(g, color){
+  g.fillStyle = color;
   g.beginPath();
   g.moveTo(HTW, 0); g.lineTo(TW, HTH); g.lineTo(HTW, TH); g.lineTo(0, HTH); g.closePath();
   g.fill();
-  // dithered specks for texture variation
+}
+
+function makeGrassTile(rng, baseTone){
+  const c = document.createElement('canvas'); c.width=TW; c.height=TH;
+  const g = c.getContext('2d');
+  fillDiamond(g, baseTone);
   const specks = 18 + Math.floor(rng()*8);
   for (let k=0;k<specks;k++){
-    // pick a random point in the tile, then check if inside diamond
     const x = Math.floor(rng()*TW);
     const y = Math.floor(rng()*TH);
     const dx = Math.abs(x - HTW)/HTW + Math.abs(y - HTH)/HTH;
@@ -139,10 +140,7 @@ function makeGrassTile(rng, baseTone){
 function makeSandTile(rng){
   const c = document.createElement('canvas'); c.width=TW; c.height=TH;
   const g = c.getContext('2d');
-  g.fillStyle = PAL.sand;
-  g.beginPath();
-  g.moveTo(HTW, 0); g.lineTo(TW, HTH); g.lineTo(HTW, TH); g.lineTo(0, HTH); g.closePath();
-  g.fill();
+  fillDiamond(g, PAL.sand);
   for (let k=0;k<10;k++){
     const x = Math.floor(rng()*TW), y = Math.floor(rng()*TH);
     if (Math.abs(x-HTW)/HTW + Math.abs(y-HTH)/HTH > 1) continue;
@@ -151,31 +149,40 @@ function makeSandTile(rng){
   }
   return c;
 }
-function makeWaterTile(rng, deep){
+// Water tile: pre-render N frames so animation cycles
+function makeWaterTileFrame(rng, deep, frame){
   const c = document.createElement('canvas'); c.width=TW; c.height=TH;
   const g = c.getContext('2d');
-  g.fillStyle = deep ? PAL.deepWater : PAL.water;
-  g.beginPath();
-  g.moveTo(HTW, 0); g.lineTo(TW, HTH); g.lineTo(HTW, TH); g.lineTo(0, HTH); g.closePath();
-  g.fill();
-  // 2-3 little wavelet highlights (positions are fixed-per-tile so they don't strobe)
-  const waves = 1 + Math.floor(rng()*2);
+  fillDiamond(g, deep ? PAL.deepWater : PAL.water);
+  const waves = 2 + Math.floor(rng()*2);
   for (let k=0;k<waves;k++){
-    const x = 6 + Math.floor(rng()*(TW-12));
-    const y = 4 + Math.floor(rng()*(TH-8));
-    if (Math.abs(x-HTW)/HTW + Math.abs(y-HTH)/HTH > .85) continue;
+    // wave positions vary per frame
+    const ox = 6 + Math.floor((rng()*1000 + frame*7) % (TW-12));
+    const oy = 4 + Math.floor((rng()*1000 + frame*3) % (TH-8));
+    if (Math.abs(ox-HTW)/HTW + Math.abs(oy-HTH)/HTH > .85) continue;
     g.fillStyle = PAL.waterLite;
-    g.fillRect(x, y, 3, 1);
+    g.fillRect(ox, oy, 3, 1);
   }
   return c;
 }
 
-/* Decorations (rendered ABOVE the tile, anchored to its top) */
+/* ---------- Decorations ---------- */
+function drawShadow(g, sx, sy){
+  // diamond-shaped dark spot under decor, slightly smaller than tile
+  g.fillStyle = PAL.shadow;
+  g.beginPath();
+  g.moveTo(sx + HTW, sy + 6);
+  g.lineTo(sx + TW - 4, sy + HTH);
+  g.lineTo(sx + HTW, sy + TH - 2);
+  g.lineTo(sx + 4, sy + HTH);
+  g.closePath();
+  g.fill();
+}
+
 function drawTree(g, sx, sy, rng){
-  // trunk
+  drawShadow(g, sx, sy);
   g.fillStyle = PAL.trunk;
   g.fillRect(sx+HTW-1, sy-2, 2, 4);
-  // canopy: a few overlapping ellipsoid clusters
   const clusters = 3 + Math.floor(rng()*2);
   for (let k=0;k<clusters;k++){
     const cx = sx + HTW + (rng()*6-3)|0;
@@ -183,16 +190,58 @@ function drawTree(g, sx, sy, rng){
     const r  = 3 + Math.floor(rng()*2);
     const tone = rng()<.55 ? PAL.treeMid : (rng()<.55 ? PAL.treeDark : PAL.treeLite);
     g.fillStyle = tone;
-    // chunky pixel circle
     for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){
       if (dx*dx + dy*dy <= r*r) g.fillRect(cx+dx, cy+dy, 1, 1);
     }
   }
-  // highlight speck
   g.fillStyle = PAL.grassHi;
   g.fillRect(sx+HTW-2, sy-9, 1, 1);
 }
+function drawPine(g, sx, sy, rng){
+  drawShadow(g, sx, sy);
+  // trunk
+  g.fillStyle = PAL.trunk; g.fillRect(sx+HTW-1, sy-1, 2, 3);
+  // three stacked triangles
+  for (let layer=0;layer<3;layer++){
+    const cy = sy - 3 - layer*4;
+    const half = 5 - layer*1.5;
+    for (let dy=0;dy<5;dy++){
+      const w = Math.max(1, Math.floor(half - dy*0.7));
+      const tone = (layer%2===0) ? PAL.pineDk : PAL.pineLite;
+      g.fillStyle = tone;
+      g.fillRect(sx + HTW - w, cy - dy, w*2, 1);
+    }
+  }
+  // tip highlight
+  g.fillStyle = PAL.grassHi; g.fillRect(sx+HTW, sy-15, 1, 1);
+}
+function drawCherry(g, sx, sy, rng){
+  drawShadow(g, sx, sy);
+  g.fillStyle = PAL.trunk; g.fillRect(sx+HTW-1, sy-2, 2, 4);
+  const clusters = 3 + Math.floor(rng()*2);
+  for (let k=0;k<clusters;k++){
+    const cx = sx + HTW + (rng()*6-3)|0;
+    const cy = sy - 6 - (rng()*5)|0;
+    const r  = 3 + Math.floor(rng()*2);
+    const tone = rng()<.55 ? PAL.cherryMid : (rng()<.55 ? PAL.cherryDk : PAL.cherryHi);
+    g.fillStyle = tone;
+    for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){
+      if (dx*dx + dy*dy <= r*r) g.fillRect(cx+dx, cy+dy, 1, 1);
+    }
+  }
+}
+function drawStump(g, sx, sy, rng){
+  drawShadow(g, sx, sy);
+  // stump body
+  g.fillStyle = PAL.stumpDk;
+  g.fillRect(sx+HTW-3, sy, 6, 3);
+  g.fillStyle = PAL.stumpLite;
+  g.fillRect(sx+HTW-2, sy-1, 4, 1); // top
+  g.fillStyle = PAL.stumpDk;
+  g.fillRect(sx+HTW-1, sy-1, 2, 1); // ring
+}
 function drawBush(g, sx, sy, rng){
+  drawShadow(g, sx, sy);
   const cx = sx + HTW + (rng()*4-2)|0;
   const cy = sy - 1;
   const r = 2 + (rng()<.4?1:0);
@@ -206,10 +255,12 @@ function drawBush(g, sx, sy, rng){
 function drawFlower(g, sx, sy, rng){
   const cx = sx + HTW + (rng()*6-3)|0;
   const cy = sy + 2 + (rng()*4-2)|0;
-  const col = rng() < .4 ? PAL.flowerR : rng() < .7 ? PAL.flowerY : PAL.flowerW;
+  const r = rng();
+  const col = r < .35 ? PAL.flowerR : r < .6 ? PAL.flowerY : r < .85 ? PAL.flowerW : PAL.flowerP;
   g.fillStyle = col; g.fillRect(cx, cy, 1, 1);
 }
 function drawRock(g, sx, sy, rng){
+  drawShadow(g, sx, sy);
   const cx = sx + HTW + (rng()*4-2)|0;
   const cy = sy + 1;
   g.fillStyle = '#5a5550';
@@ -221,23 +272,21 @@ function drawRock(g, sx, sy, rng){
 
 /* ---------- World generation ---------- */
 const TILE = { DEEP:0, WATER:1, SAND:2, GRASS:3 };
+const DECO = { NONE:0, TREE:1, BUSH:2, FLOWER:3, ROCK:4, PINE:5, CHERRY:6, STUMP:7 };
 function generateWorld(W, H, seed){
   const noise = makeNoise2D(seed);
   const noise2 = makeNoise2D(seed ^ 0x9e3779b9);
+  const noise3 = makeNoise2D(seed ^ 0x12345);
   const rng = mulberry32(seed ^ 0xabcdef);
   const map = new Uint8Array(W*H);
-  const tone = new Float32Array(W*H); // 0..1 grass tone variation
-  const deco = new Uint8Array(W*H);   // 0 none, 1 tree, 2 bush, 3 flower, 4 rock
+  const tone = new Float32Array(W*H);
+  const deco = new Uint8Array(W*H);
+  const elev = new Int8Array(W*H);
 
-  // continent-shaping mask: lower toward edges so rivers exit naturally
   for (let j=0;j<H;j++){
     for (let i=0;i<W;i++){
-      const nx = i/W - .5, ny = j/H - .5;
-      // 2-octave river field (using ridged noise → 1 - |n|)
       const rn = 1 - Math.abs(fbm((x,y)=>noise(x,y), i*0.07, j*0.07, 3, 2, .5));
-      // moisture / extra band
       const m  = fbm((x,y)=>noise2(x,y), i*0.04, j*0.04, 2, 2, .5);
-      // ridge threshold creates winding rivers
       const isRiver = rn > .94 + m*.02;
       const isDeep  = rn > .965;
       const nearShore = rn > .91 && rn <= .94;
@@ -248,10 +297,16 @@ function generateWorld(W, H, seed){
       else t = TILE.GRASS;
       map[j*W+i] = t;
       tone[j*W+i] = (fbm((x,y)=>noise2(x,y), i*0.13, j*0.13, 3, 2, .5)+1)/2;
+      // subtle elevation only on grass (1px lift per hill noise band)
+      if (t === TILE.GRASS){
+        const e = fbm((x,y)=>noise3(x,y), i*0.10, j*0.10, 3, 2, .5);
+        if (e > 0.35) elev[j*W+i] = -2;
+        else if (e > 0.15) elev[j*W+i] = -1;
+      }
     }
   }
 
-  // place decorations on grass — keep clear of shore (within 1 tile of sand)
+  // deco
   function nearWater(i,j){
     for (let dj=-1; dj<=1; dj++) for (let di=-1; di<=1; di++){
       const x=i+di, y=j+dj; if (x<0||y<0||x>=W||y>=H) continue;
@@ -262,34 +317,42 @@ function generateWorld(W, H, seed){
   for (let j=0;j<H;j++){
     for (let i=0;i<W;i++){
       if (map[j*W+i] !== TILE.GRASS) continue;
-      // cluster trees with a tree-noise gate
+      // tree clustering noise (different bands favor different tree types)
       const tn = fbm((x,y)=>noise2(x,y), i*0.22+10.1, j*0.22-3.7, 3, 2, .5);
+      const tn2 = fbm((x,y)=>noise3(x,y), i*0.18-5.2, j*0.18+7.1, 3, 2, .5);
       const r = rng();
       if (!nearWater(i,j)) {
-        if (tn > .35 && r < .55) deco[j*W+i] = 1;       // tree (clustered)
-        else if (tn > .1 && r < .12) deco[j*W+i] = 2;   // bush
-        else if (r < .035) deco[j*W+i] = 3;             // flower
-        else if (r < .045) deco[j*W+i] = 4;             // rock
+        // tree-type gates based on tn2:
+        const forestGate = tn > .30 && r < .60;
+        if (forestGate){
+          // pick variant
+          if (tn2 > 0.35) deco[j*W+i] = DECO.PINE;        // pine clusters in colder bands
+          else if (tn2 < -0.25) deco[j*W+i] = DECO.CHERRY; // cherry in warm bands
+          else deco[j*W+i] = DECO.TREE;
+        } else if (tn > .1 && r < .15) deco[j*W+i] = DECO.BUSH;
+        else if (r < .04) deco[j*W+i] = DECO.FLOWER;
+        else if (r < .052) deco[j*W+i] = DECO.ROCK;
+        else if (r < .057) deco[j*W+i] = DECO.STUMP;
       } else {
-        // shore: more rocks, fewer trees
-        if (r < .08) deco[j*W+i] = 4;
-        else if (r < .12) deco[j*W+i] = 2;
+        if (r < .08) deco[j*W+i] = DECO.ROCK;
+        else if (r < .14) deco[j*W+i] = DECO.BUSH;
       }
     }
   }
-  return { map, tone, deco, W, H };
+  return { map, tone, deco, elev, W, H };
 }
 
 /* ---------- Rendering ---------- */
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
-
-const SCALE = 3;            // pixel chunkiness
-let INTERNAL_W = 0, INTERNAL_H = 0;
+const SCALE = 3;
+let INTERNAL_W=0, INTERNAL_H=0;
 let world = null;
-let tileCache = {};         // per-seed pre-rendered variations
+let tileCache = {};
 let currentSeed = 0;
+let waterFrame = 0;
+let animTimer = null;
 
 function pickGrassTone(toneVal){
   if (toneVal < .25) return PAL.grass1;
@@ -301,7 +364,6 @@ function pickGrassTone(toneVal){
 function rebuildTileCache(seed){
   const rng = mulberry32(seed ^ 0x1234);
   tileCache = {
-    grass: Array.from({length: 8}, () => makeGrassTile(rng, pickGrassTone(rng()))),
     grass_byTone: [
       makeGrassTile(rng, PAL.grass1),
       makeGrassTile(rng, PAL.grass2),
@@ -309,13 +371,20 @@ function rebuildTileCache(seed){
       makeGrassTile(rng, PAL.grass4),
     ],
     sand: Array.from({length: 3}, () => makeSandTile(rng)),
-    water: Array.from({length: 4}, () => makeWaterTile(rng, false)),
-    deep: Array.from({length: 3}, () => makeWaterTile(rng, true)),
+    waterFrames: [
+      Array.from({length: 4}, () => makeWaterTileFrame(rng, false, 0)),
+      Array.from({length: 4}, () => makeWaterTileFrame(rng, false, 1)),
+      Array.from({length: 4}, () => makeWaterTileFrame(rng, false, 2)),
+    ],
+    deepFrames: [
+      Array.from({length: 3}, () => makeWaterTileFrame(rng, true, 0)),
+      Array.from({length: 3}, () => makeWaterTileFrame(rng, true, 1)),
+      Array.from({length: 3}, () => makeWaterTileFrame(rng, true, 2)),
+    ],
   };
 }
 
 function fit(){
-  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
   INTERNAL_W = Math.ceil(window.innerWidth  / SCALE);
   INTERNAL_H = Math.ceil(window.innerHeight / SCALE);
   canvas.width  = INTERNAL_W;
@@ -326,77 +395,70 @@ function build(seed){
   currentSeed = seed >>> 0;
   document.getElementById('seedView').textContent = currentSeed;
   fit();
-  // Map size: enough tiles to cover the rotated diamond projection
   const cols = Math.ceil(INTERNAL_W / HTW) + 4;
   const rows = Math.ceil(INTERNAL_H / HTH) + 4;
-  // For iso we need a square-ish grid such that the projected diamond covers the rectangle.
-  // Number of "logical" tiles: roughly (cols + rows)/2 each axis.
   const N = Math.ceil((cols + rows) / 2) + 6;
   world = generateWorld(N, N, currentSeed);
   rebuildTileCache(currentSeed);
   draw();
+  startAnim();
 }
 
 function draw(){
   if (!world) return;
-  // background sky/grass shadow
   ctx.fillStyle = '#0e140e';
   ctx.fillRect(0, 0, INTERNAL_W, INTERNAL_H);
-
-  const { map, tone, deco, W, H } = world;
-
-  // iso origin: roughly center horizontally, slightly upper third vertically
+  const { map, tone, deco, elev, W, H } = world;
   const ox = Math.floor(INTERNAL_W/2 - HTW);
   const oy = Math.floor(INTERNAL_H/2 - (H * HTH)/2);
-
-  // Painter's algorithm: row by row from back to front. In iso, (i+j) ascending is correct.
   for (let s = 0; s < W + H - 1; s++) {
     const iMin = Math.max(0, s - (H-1));
     const iMax = Math.min(W-1, s);
     for (let i = iMin; i <= iMax; i++) {
       const j = s - i;
       const sx = ox + (i - j) * HTW;
-      const sy = oy + (i + j) * HTH;
-      // cull off-screen
+      const sy = oy + (i + j) * HTH + (elev[j*W+i] || 0);
       if (sx + TW < 0 || sy + TH < 0 || sx > INTERNAL_W || sy > INTERNAL_H) continue;
       const idx = j*W + i;
       const t = map[idx];
       let tile;
       if (t === TILE.GRASS){
-        const tv = tone[idx];
-        const which = Math.min(3, Math.floor(tv * 4));
+        const which = Math.min(3, Math.floor(tone[idx] * 4));
         tile = tileCache.grass_byTone[which];
       } else if (t === TILE.WATER){
-        tile = tileCache.water[(i*7 + j*13) % tileCache.water.length];
+        tile = tileCache.waterFrames[waterFrame][(i*7 + j*13) % 4];
       } else if (t === TILE.DEEP){
-        tile = tileCache.deep[(i*5 + j*11) % tileCache.deep.length];
+        tile = tileCache.deepFrames[waterFrame][(i*5 + j*11) % 3];
       } else if (t === TILE.SAND){
         tile = tileCache.sand[(i*3 + j*5) % tileCache.sand.length];
       }
       if (tile) ctx.drawImage(tile, sx, sy);
-
-      // decoration AFTER the base tile
       const d = deco[idx];
       if (d) {
-        // deterministic per-tile RNG for stable decoration
         const dr = mulberry32((currentSeed ^ (i*73856093 ^ j*19349663))>>>0);
-        if (d === 1) drawTree(ctx, sx, sy, dr);
-        else if (d === 2) drawBush(ctx, sx, sy, dr);
-        else if (d === 3) drawFlower(ctx, sx, sy, dr);
-        else if (d === 4) drawRock(ctx, sx, sy, dr);
+        if      (d === DECO.TREE)   drawTree(ctx, sx, sy, dr);
+        else if (d === DECO.BUSH)   drawBush(ctx, sx, sy, dr);
+        else if (d === DECO.FLOWER) drawFlower(ctx, sx, sy, dr);
+        else if (d === DECO.ROCK)   drawRock(ctx, sx, sy, dr);
+        else if (d === DECO.PINE)   drawPine(ctx, sx, sy, dr);
+        else if (d === DECO.CHERRY) drawCherry(ctx, sx, sy, dr);
+        else if (d === DECO.STUMP)  drawStump(ctx, sx, sy, dr);
       }
     }
   }
 }
 
-/* ---------- Audio: procedural ambient (brown-noise water + cricket chirps) ---------- */
+function startAnim(){
+  if (animTimer) clearInterval(animTimer);
+  animTimer = setInterval(() => {
+    waterFrame = (waterFrame + 1) % 3;
+    draw();
+  }, 520);
+}
+
+/* ---------- Audio ---------- */
 class Ambient {
-  constructor(){
-    this.ac = null;
-    this.master = null;
-    this.muted = false;
-    this.cricketTimer = null;
-  }
+  constructor(){ this.ac = null; this.master = null; this.muted = false; this.cricketTimer = null; }
   start(){
     if (this.ac) return;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -405,44 +467,22 @@ class Ambient {
     this.master = ac.createGain();
     this.master.gain.value = 0;
     this.master.connect(ac.destination);
-    // fade in
     this.master.gain.linearRampToValueAtTime(0.55, ac.currentTime + 1.2);
-
-    // ---- water: brown noise → bandpass with slow LFO ----
     const bufSize = 2 * ac.sampleRate;
     const noiseBuf = ac.createBuffer(1, bufSize, ac.sampleRate);
     const data = noiseBuf.getChannelData(0);
     let last = 0;
-    for (let i=0;i<bufSize;i++){
-      const white = Math.random()*2-1;
-      last = (last + 0.02 * white) / 1.02;
-      data[i] = last * 3.5;
-    }
-    const noise = ac.createBufferSource();
-    noise.buffer = noiseBuf; noise.loop = true;
-    const bp = ac.createBiquadFilter();
-    bp.type = 'bandpass'; bp.frequency.value = 480; bp.Q.value = .8;
+    for (let i=0;i<bufSize;i++){ const w=Math.random()*2-1; last = (last + 0.02 * w) / 1.02; data[i] = last * 3.5; }
+    const noise = ac.createBufferSource(); noise.buffer = noiseBuf; noise.loop = true;
+    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 480; bp.Q.value = .8;
     const waterGain = ac.createGain(); waterGain.gain.value = .55;
-
     const lfo = ac.createOscillator(); lfo.frequency.value = .12;
     const lfoGain = ac.createGain(); lfoGain.gain.value = 200;
-    lfo.connect(lfoGain).connect(bp.frequency);
-    lfo.start();
-
-    noise.connect(bp).connect(waterGain).connect(this.master);
-    noise.start();
-
-    // ---- wind layer: pink-ish noise low-passed ----
-    const wbuf = ac.createBuffer(1, bufSize, ac.sampleRate);
-    const wd = wbuf.getChannelData(0);
+    lfo.connect(lfoGain).connect(bp.frequency); lfo.start();
+    noise.connect(bp).connect(waterGain).connect(this.master); noise.start();
+    const wbuf = ac.createBuffer(1, bufSize, ac.sampleRate); const wd = wbuf.getChannelData(0);
     let b0=0,b1=0,b2=0;
-    for (let i=0;i<bufSize;i++){
-      const w = Math.random()*2-1;
-      b0 = 0.99765*b0 + w*0.0990460;
-      b1 = 0.96300*b1 + w*0.2965164;
-      b2 = 0.57000*b2 + w*1.0526913;
-      wd[i] = (b0+b1+b2 + w*0.1848)*0.07;
-    }
+    for (let i=0;i<bufSize;i++){ const w = Math.random()*2-1; b0 = 0.99765*b0 + w*0.0990460; b1 = 0.96300*b1 + w*0.2965164; b2 = 0.57000*b2 + w*1.0526913; wd[i] = (b0+b1+b2 + w*0.1848)*0.07; }
     const wsrc = ac.createBufferSource(); wsrc.buffer = wbuf; wsrc.loop = true;
     const wlp = ac.createBiquadFilter(); wlp.type='lowpass'; wlp.frequency.value = 700;
     const wgain = ac.createGain(); wgain.gain.value = .35;
@@ -450,16 +490,10 @@ class Ambient {
     const wlfoG = ac.createGain(); wlfoG.gain.value = .18;
     wlfo.connect(wlfoG).connect(wgain.gain); wlfo.start();
     wsrc.connect(wlp).connect(wgain).connect(this.master); wsrc.start();
-
-    // ---- crickets: occasional triangle-wave chirps ----
     const cricket = () => {
-      if (!this.ac || this.muted) {
-        this.cricketTimer = setTimeout(cricket, 800 + Math.random()*1200);
-        return;
-      }
+      if (!this.ac || this.muted) { this.cricketTimer = setTimeout(cricket, 800 + Math.random()*1200); return; }
       const t = ac.currentTime;
-      const osc = ac.createOscillator();
-      osc.type = 'triangle';
+      const osc = ac.createOscillator(); osc.type = 'triangle';
       const f = 3200 + Math.random()*900;
       osc.frequency.setValueAtTime(f, t);
       osc.frequency.exponentialRampToValueAtTime(f*1.05, t+.04);
@@ -469,7 +503,6 @@ class Ambient {
       g.gain.exponentialRampToValueAtTime(0.0001, t+.05);
       osc.connect(g).connect(this.master);
       osc.start(t); osc.stop(t+.06);
-      // a few quick chirps in a row
       const reps = 1 + Math.floor(Math.random()*3);
       for (let k=1;k<reps;k++){
         const t2 = t + k*.08 + Math.random()*.02;
@@ -496,26 +529,13 @@ class Ambient {
 }
 const ambient = new Ambient();
 
-/* ---------- Wire up ---------- */
 const overlay = document.getElementById('overlay');
-const reseed  = document.getElementById('reseed');
-const muteBtn = document.getElementById('mute');
-
-overlay.addEventListener('click', () => {
-  overlay.classList.add('hidden');
-  ambient.start();
-});
-reseed.addEventListener('click', () => build(Math.floor(Math.random()*0xffffffff)));
-muteBtn.addEventListener('click', () => {
-  ambient.toggleMute();
-  muteBtn.textContent = ambient.muted ? 'unmute' : 'mute';
-});
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); ambient.start(); });
+document.getElementById('reseed').addEventListener('click', () => build(Math.floor(Math.random()*0xffffffff)));
+document.getElementById('mute').addEventListener('click', e => { ambient.toggleMute(); e.target.textContent = ambient.muted ? 'unmute' : 'mute'; });
 
 let resizeTO = null;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeTO);
-  resizeTO = setTimeout(() => build(currentSeed), 120);
-});
+window.addEventListener('resize', () => { clearTimeout(resizeTO); resizeTO = setTimeout(() => build(currentSeed), 120); });
 
 build(Math.floor(Math.random()*0xffffffff));
 </script>
