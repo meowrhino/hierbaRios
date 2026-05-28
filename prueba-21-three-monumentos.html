@@ -330,6 +330,38 @@ function build(seed){
   inst.instanceMatrix.needsUpdate = true;
   root.add(inst);
 
+  /* ---------- Posiciones de monumentos PRIMERO (para excluir árboles) ---------- */
+  function groundAt0(x, z){
+    if (isWater(x,z) || isShore(x,z)) return null;
+    return 0.8 + sampleHill(x,z) * 2.4;
+  }
+  function findFlatPos(cx, cz, range, attempts){
+    for (let k=0; k<attempts; k++){
+      const x = cx + (rng()-0.5)*range;
+      const z = cz + (rng()-0.5)*range;
+      const y0 = groundAt0(x,z);
+      if (y0 === null) continue;
+      const y1 = groundAt0(x+1, z+1);
+      const y2 = groundAt0(x-1, z-1);
+      if (y1 === null || y2 === null) continue;
+      if (Math.abs(y1 - y0) > 0.4 || Math.abs(y2 - y0) > 0.4) continue;
+      return { x, z, y: y0 };
+    }
+    return { x: cx, z: cz, y: groundAt0(cx, cz) ?? 0.8 };
+  }
+  const monumentPositions = [
+    { pos: findFlatPos(-16, -10, 8, 40), r: 9 },   // templo (radio exclusión)
+    { pos: findFlatPos( 16, -10, 8, 40), r: 9 },   // anfiteatro
+    { pos: findFlatPos(  0,  16, 8, 40), r: 7 },   // arco
+  ];
+  function isInsideMonument(x, z){
+    for (const m of monumentPositions){
+      const dx = x - m.pos.x, dz = z - m.pos.z;
+      if (dx*dx + dz*dz < m.r*m.r) return true;
+    }
+    return false;
+  }
+
   /* ---------- Low-poly trees (instanced cones + cylinders) ---------- */
   const trunkGeo = new THREE.CylinderGeometry(0.10, 0.14, 0.9, 6);
   trunkGeo.translate(0, 0.45, 0);
@@ -344,6 +376,7 @@ function build(seed){
     const x = (rng()-0.5) * WORLD * 0.94;
     const z = (rng()-0.5) * WORLD * 0.94;
     if (isWater(x,z) || isShore(x,z)) continue;
+    if (isInsideMonument(x, z)) continue;   // no árboles dentro de monumentos
     // cluster gate
     const tg = fbm(noise2, x*0.08+12, z*0.08+7, 3);
     if (tg < 0.15) continue;
@@ -356,7 +389,6 @@ function build(seed){
     dummy.scale.set(s, s + rng()*0.3, s);
     dummy.updateMatrix();
     trunks.setMatrixAt(nTree, dummy.matrix);
-    // cone slight color variation by setting same matrix; we tint via instanceColor
     cones.setMatrixAt(nTree, dummy.matrix);
     nTree++;
   }
@@ -376,27 +408,7 @@ function build(seed){
   const roofMat   = new THREE.MeshStandardMaterial({ color: 0xc44a32, roughness: 0.82, flatShading: true });
   const wallMat   = new THREE.MeshStandardMaterial({ color: 0xd8c8a8, roughness: 0.9,  flatShading: true });
 
-  function groundAt(x, z){
-    if (isWater(x,z) || isShore(x,z)) return null;
-    return 0.8 + sampleHill(x,z) * 2.4;
-  }
-
-  // --- TEMPLO MONUMENTAL ---
-  // Buscar una zona plana cerca del cuadrante (-15, -10) en xz
-  function findFlat(cx, cz, range, attempts){
-    for (let k=0; k<attempts; k++){
-      const x = cx + (rng()-0.5)*range;
-      const z = cz + (rng()-0.5)*range;
-      const y0 = groundAt(x,z);
-      if (y0 === null) continue;
-      const y1 = groundAt(x+1, z+1);
-      const y2 = groundAt(x-1, z-1);
-      if (y1 === null || y2 === null) continue;
-      if (Math.abs(y1 - y0) > 0.4 || Math.abs(y2 - y0) > 0.4) continue;
-      return { x, z, y: y0 };
-    }
-    return { x: cx, z: cz, y: groundAt(cx, cz) ?? 0.8 };
-  }
+  // (groundAt0 y findFlatPos ya definidos arriba para el spawn de árboles)
   function buildTemple(pos){
     const G = new THREE.Group();
     // podio
@@ -523,13 +535,10 @@ function build(seed){
     return G;
   }
 
-  // plantar los 3 monumentos en zonas planas separadas
-  const templePos = findFlat(-16, -10, 8, 40);
-  const amphiPos  = findFlat( 16, -10, 8, 40);
-  const archPos   = findFlat(  0,  16, 8, 40);
-  root.add(buildTemple(templePos));
-  root.add(buildAmphi(amphiPos));
-  root.add(buildArch(archPos));
+  // plantar los 3 monumentos en las posiciones ya calculadas arriba
+  root.add(buildTemple(monumentPositions[0].pos));
+  root.add(buildAmphi(monumentPositions[1].pos));
+  root.add(buildArch(monumentPositions[2].pos));
 }
 
 build(currentSeed);

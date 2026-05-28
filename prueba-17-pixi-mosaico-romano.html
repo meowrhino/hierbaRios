@@ -193,8 +193,10 @@ const frag = /* glsl */`
       col = vec3(0.92,0.86,0.72);
       float vM = hash21(p + 7.0);
       col *= 0.92 + vM * 0.10;
-      // templo dentro (rectángulo más alto que ancho con detalles)
-      vec2 t = c - vec2(0.0, 0.04);   // desplazado hacia arriba un pelín
+      // templo dentro. Invertimos Y porque en este shader Y+ es abajo en
+      // pantalla, y queremos pensar el templo en su orientación natural
+      // (frontón arriba, escalones abajo).
+      vec2 t = vec2(c.x, -c.y + 0.04);
       float tw = 0.18, th = 0.14;
       if (abs(t.x) < tw && t.y > -th && t.y < th){
         // sombra suelo (escalones inferiores)
