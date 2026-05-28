@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba 5 · SVG vectorial</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#cfe2b6; overflow:hidden; font-family: ui-monospace, Menlo, monospace; color:#2a3a1e; }
+  svg { display:block; position:fixed; inset:0; width:100vw; height:100vh; }
+  #overlay {
+    position: fixed; inset: 0; background: rgba(216,228,196,.9); backdrop-filter: blur(4px);
+    display: grid; place-items: center; cursor: pointer; z-index: 10; transition: opacity .4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .card { text-align:center; padding:2rem 3rem; border:1px solid #6a8a4a; background:#e8f0d8; }
+  #overlay h1 { margin:0 0 .8rem; font-size:1rem; letter-spacing:.2em; color:#2a3a1e; }
+  #overlay p { margin:.2rem 0; font-size:.8rem; opacity:.7; }
+  #hud { position: fixed; left:12px; bottom:10px; font-size:11px; opacity:.75; z-index:5; color:#2a3a1e; }
+  #hud button { background:#e8f0d8; color:#2a3a1e; border:1px solid #6a8a4a; font:inherit; padding:4px 8px; margin-left:6px; cursor:pointer; }
+  #hud button:hover { background:#d8e8c4; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="overlay">
+  <div class="card">
+    <h1>PRUEBA 5 — SVG VECTORIAL</h1>
+    <p>marching squares · patrones · filtros orgánicos</p>
+    <p>click para empezar</p>
+  </div>
+</div>
+<div id="hud">
+  seed <span id="seedView">—</span>
+  <button id="reseed">nuevo seed</button>
+  <button id="mute">mute</button>
+</div>
+
+<script>
+/* ============================================================
+   SVG vectorial · noise + marching squares for river contours,
+   pattern fills, decorative trees. Audio: wind + birds.
+   ============================================================ */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+const PALETTE = {
+  bg:        '#cfe2b6',
+  grass1:    '#aac984',
+  grass2:    '#8fb96b',
+  grass3:    '#73a554',
+  grass4:    '#578d3f',
+  shoreLight:'#ead7a6',
+  shoreDark: '#cbb47a',
+  river:     '#7bb0c6',
+  riverDeep: '#4f8aa6',
+  riverHi:   '#bcdce8',
+  treeDk:    '#3a5a2c',
+  treeMid:   '#54824a',
+  treeLi:    '#7eb46a',
+  trunk:     '#3e2a18',
+  flowerR:   '#d35a4a',
+  flowerY:   '#e8c34d',
+  flowerW:   '#f8f3df',
+  ink:       '#2a3a1e',
+};
+
+/* ---------- Seed-based PRNG and 2D simplex ---------- */
+function mulberry32(seed){ let s=seed>>>0; return () => { s=(s+0x6D2B79F5)|0; let t=s; t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61); return ((t^(t>>>14))>>>0)/4294967296; }; }
+function makeNoise2D(seed){
+  const grad3 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  const p = new Uint8Array(256); for (let i=0;i<256;i++) p[i]=i;
+  const r = mulberry32(seed);
+  for (let i=255;i>0;i--){ const j=Math.floor(r()*(i+1)); const x=p[i]; p[i]=p[j]; p[j]=x; }
+  const perm=new Uint8Array(512), pm=new Uint8Array(512);
+  for (let i=0;i<512;i++){ perm[i]=p[i&255]; pm[i]=perm[i]&7; }
+  const F2=.5*(Math.sqrt(3)-1), G2=(3-Math.sqrt(3))/6;
+  return (xin,yin) => {
+    const sk=(xin+yin)*F2;
+    const i=Math.floor(xin+sk), j=Math.floor(yin+sk);
+    const t=(i+j)*G2, X0=i-t, Y0=j-t;
+    const x0=xin-X0, y0=yin-Y0;
+    let i1,j1; if (x0>y0){i1=1;j1=0;} else {i1=0;j1=1;}
+    const x1=x0-i1+G2, y1=y0-j1+G2;
+    const x2=x0-1+2*G2, y2=y0-1+2*G2;
+    const ii=i&255, jj=j&255;
+    const g0=pm[ii+perm[jj]], g1=pm[ii+i1+perm[jj+j1]], g2=pm[ii+1+perm[jj+1]];
+    let n0=0,n1=0,n2=0;
+    let tt=.5-x0*x0-y0*y0; if (tt>=0){ tt*=tt; n0=tt*tt*(grad3[g0][0]*x0+grad3[g0][1]*y0); }
+    tt=.5-x1*x1-y1*y1; if (tt>=0){ tt*=tt; n1=tt*tt*(grad3[g1][0]*x1+grad3[g1][1]*y1); }
+    tt=.5-x2*x2-y2*y2; if (tt>=0){ tt*=tt; n2=tt*tt*(grad3[g2][0]*x2+grad3[g2][1]*y2); }
+    return 70*(n0+n1+n2);
+  };
+}
+function fbm(n,x,y,oct=4){
+  let v=0,a=1,f=1,sum=0;
+  for (let i=0;i<oct;i++){ v += a*n(x*f,y*f); sum+=a; a*=0.5; f*=2.02; }
+  return v/sum;
+}
+
+/* ---------- Marching squares: extract iso-contour polylines ---------- */
+// Given a 2D grid field of values, threshold T, returns array of polylines
+// where each polyline is array of {x,y} in grid coords (we then scale to screen).
+function marchingSquares(field, W, H, T){
+  const segments = [];
+  function pt(a, b){
+    // linear interpolation along the edge between a={x,y,v} and b={x,y,v}
+    const t = (T - a.v) / (b.v - a.v);
+    return { x: a.x + t*(b.x-a.x), y: a.y + t*(b.y-a.y) };
+  }
+  for (let j=0;j<H-1;j++){
+    for (let i=0;i<W-1;i++){
+      const a = { x:i,   y:j,   v: field[j*W+i] };
+      const b = { x:i+1, y:j,   v: field[j*W+i+1] };
+      const c = { x:i+1, y:j+1, v: field[(j+1)*W+i+1] };
+      const d = { x:i,   y:j+1, v: field[(j+1)*W+i] };
+      let idx = 0;
+      if (a.v > T) idx |= 1;
+      if (b.v > T) idx |= 2;
+      if (c.v > T) idx |= 4;
+      if (d.v > T) idx |= 8;
+      const ab = ()=>pt(a,b), bc=()=>pt(b,c), cd=()=>pt(c,d), da=()=>pt(d,a);
+      switch (idx){
+        case 0: case 15: break;
+        case 1: case 14: segments.push([da(), ab()]); break;
+        case 2: case 13: segments.push([ab(), bc()]); break;
+        case 3: case 12: segments.push([da(), bc()]); break;
+        case 4: case 11: segments.push([bc(), cd()]); break;
+        case 5: segments.push([da(), ab()]); segments.push([bc(), cd()]); break;
+        case 6: case 9:  segments.push([ab(), cd()]); break;
+        case 7: case 8:  segments.push([da(), cd()]); break;
+        case 10: segments.push([ab(), bc()]); segments.push([cd(), da()]); break;
+      }
+    }
+  }
+  return chainSegments(segments);
+}
+function chainSegments(segs){
+  // build map from start point key to seg index for chaining
+  const key = (p) => `${p.x.toFixed(4)}_${p.y.toFixed(4)}`;
+  const startMap = new Map();
+  segs.forEach((s, i) => startMap.set(key(s[0]), i));
+  const used = new Set();
+  const chains = [];
+  for (let i=0;i<segs.length;i++){
+    if (used.has(i)) continue;
+    const chain = [segs[i][0], segs[i][1]];
+    used.add(i);
+    // extend forward
+    let last = segs[i][1];
+    while (true){
+      const k = key(last);
+      const next = startMap.get(k);
+      if (next === undefined || used.has(next)) break;
+      chain.push(segs[next][1]);
+      used.add(next);
+      last = segs[next][1];
+    }
+    chains.push(chain);
+  }
+  return chains;
+}
+
+/* ---------- Smooth and convert polyline to cubic-bezier SVG path ---------- */
+function smoothPath(pts, scaleX, scaleY, closed=false){
+  if (pts.length < 2) return '';
+  const sx = (p) => p.x * scaleX;
+  const sy = (p) => p.y * scaleY;
+  const arr = pts.slice();
+  if (closed && (arr[0].x!==arr[arr.length-1].x || arr[0].y!==arr[arr.length-1].y)){
+    arr.push(arr[0]);
+  }
+  let d = `M ${sx(arr[0]).toFixed(2)} ${sy(arr[0]).toFixed(2)}`;
+  // Catmull-Rom -> bezier
+  const tension = 0.35;
+  for (let i=0; i<arr.length-1; i++){
+    const p0 = arr[i-1] || arr[i];
+    const p1 = arr[i];
+    const p2 = arr[i+1];
+    const p3 = arr[i+2] || p2;
+    const c1x = sx(p1) + (sx(p2) - sx(p0)) * tension * (1/6);
+    const c1y = sy(p1) + (sy(p2) - sy(p0)) * tension * (1/6);
+    const c2x = sx(p2) - (sx(p3) - sx(p1)) * tension * (1/6);
+    const c2y = sy(p2) - (sy(p3) - sy(p1)) * tension * (1/6);
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${sx(p2).toFixed(2)} ${sy(p2).toFixed(2)}`;
+  }
+  if (closed) d += ' Z';
+  return d;
+}
+
+/* ---------- Build the SVG ---------- */
+let currentSeed = Math.floor(Math.random()*1e6);
+
+function buildSVG(seed){
+  currentSeed = seed >>> 0;
+  document.getElementById('seedView').textContent = currentSeed;
+  const W = window.innerWidth, H = window.innerHeight;
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  root.appendChild(svg);
+
+  // ----- defs (patterns + filters) -----
+  const defs = document.createElementNS(SVG_NS, 'defs');
+  defs.innerHTML = `
+    <filter id="paper" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="1.8" numOctaves="2" seed="${currentSeed%1000}"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.10  0 0 0 0 0.16  0 0 0 0 0.08  0 0 0 0.12 0"/>
+      <feComposite operator="in" in2="SourceGraphic" result="grain"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="grain"/></feMerge>
+    </filter>
+
+    <filter id="watery" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018 0.04" numOctaves="2" seed="${(currentSeed*7)%1000}" result="turb"/>
+      <feDisplacementMap in="SourceGraphic" in2="turb" scale="6"/>
+    </filter>
+
+    <filter id="grainy" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="${(currentSeed*3)%1000}"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.18 0"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+
+    <pattern id="grassDots" patternUnits="userSpaceOnUse" width="18" height="18">
+      <rect width="18" height="18" fill="${PALETTE.grass2}"/>
+      <circle cx="3" cy="4" r="0.8" fill="${PALETTE.grass4}"/>
+      <circle cx="11" cy="9" r="0.8" fill="${PALETTE.grass3}"/>
+      <circle cx="6" cy="14" r="0.8" fill="${PALETTE.grass4}"/>
+      <circle cx="15" cy="3" r="0.8" fill="${PALETTE.grass3}"/>
+    </pattern>
+
+    <pattern id="grassDots2" patternUnits="userSpaceOnUse" width="22" height="22">
+      <rect width="22" height="22" fill="${PALETTE.grass3}"/>
+      <path d="M3 18 q1 -3 0 -6" stroke="${PALETTE.grass4}" stroke-width=".8" fill="none" stroke-linecap="round"/>
+      <path d="M9 16 q1 -4 0 -7" stroke="${PALETTE.grass4}" stroke-width=".8" fill="none" stroke-linecap="round"/>
+      <path d="M16 19 q1 -3 0 -6" stroke="${PALETTE.grass4}" stroke-width=".8" fill="none" stroke-linecap="round"/>
+      <path d="M14 7 q1 -4 0 -7" stroke="${PALETTE.grass4}" stroke-width=".8" fill="none" stroke-linecap="round"/>
+    </pattern>
+
+    <symbol id="tree" viewBox="-20 -20 40 40">
+      <ellipse cx="0" cy="14" rx="11" ry="2.5" fill="rgba(0,0,0,.18)"/>
+      <path d="M-1.5 8 L1.5 8 L1.5 -2 L-1.5 -2 Z" fill="${PALETTE.trunk}"/>
+      <path d="M0 -16 C 11 -16 14 -3 8 3 C 13 -2 9 8 0 8 C -9 8 -13 -2 -8 3 C -14 -3 -11 -16 0 -16 Z" fill="${PALETTE.treeMid}"/>
+      <path d="M-4 -10 C 4 -14 12 -8 8 -2 C 4 -6 -4 -6 -8 -2 C -12 -8 -4 -14 -4 -10 Z" fill="${PALETTE.treeDk}" opacity=".5"/>
+      <path d="M-2 -12 C 3 -14 7 -10 5 -6 C 2 -10 -2 -10 -5 -6 C -7 -10 -7 -14 -2 -12 Z" fill="${PALETTE.treeLi}" opacity=".7"/>
+    </symbol>
+
+    <symbol id="bush" viewBox="-12 -10 24 20">
+      <ellipse cx="0" cy="6" rx="7" ry="1.6" fill="rgba(0,0,0,.18)"/>
+      <ellipse cx="-3" cy="2" rx="5" ry="4" fill="${PALETTE.treeMid}"/>
+      <ellipse cx="3"  cy="3" rx="6" ry="4.5" fill="${PALETTE.treeDk}"/>
+      <ellipse cx="0"  cy="0" rx="4" ry="3" fill="${PALETTE.treeLi}"/>
+    </symbol>
+  `;
+  svg.appendChild(defs);
+
+  // ----- background grass color -----
+  const bg = document.createElementNS(SVG_NS, 'rect');
+  bg.setAttribute('width', W); bg.setAttribute('height', H);
+  bg.setAttribute('fill', 'url(#grassDots)');
+  svg.appendChild(bg);
+
+  // ----- darker grass region (clustered by noise) -----
+  const noise = makeNoise2D(currentSeed);
+  const noise2 = makeNoise2D(currentSeed ^ 0xa1b2c3);
+
+  // Grid resolution for marching squares
+  const cell = 18;
+  const cols = Math.ceil(W / cell) + 1;
+  const rows = Math.ceil(H / cell) + 1;
+  // Field 1: grass tonal — for darker patches
+  const grassField = new Float32Array(cols*rows);
+  for (let j=0;j<rows;j++) for (let i=0;i<cols;i++){
+    grassField[j*cols+i] = fbm(noise2, i*0.07, j*0.07, 4);
+  }
+  // Darker patches as paths
+  const darkPaths = marchingSquares(grassField, cols, rows, 0.12);
+  const gDark = document.createElementNS(SVG_NS, 'g');
+  gDark.setAttribute('filter', 'url(#watery)');
+  for (const chain of darkPaths){
+    if (chain.length < 6) continue;
+    const d = smoothPath(chain, cell, cell, true);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'url(#grassDots2)');
+    path.setAttribute('opacity', '0.85');
+    gDark.appendChild(path);
+  }
+  svg.appendChild(gDark);
+  // even darker patches
+  const darkerPaths = marchingSquares(grassField, cols, rows, 0.28);
+  const gDarker = document.createElementNS(SVG_NS, 'g');
+  gDarker.setAttribute('filter', 'url(#watery)');
+  for (const chain of darkerPaths){
+    if (chain.length < 8) continue;
+    const d = smoothPath(chain, cell, cell, true);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', PALETTE.grass4);
+    path.setAttribute('opacity', '0.55');
+    gDarker.appendChild(path);
+  }
+  svg.appendChild(gDarker);
+
+  // ----- RIVER (ridged noise threshold) -----
+  const riverField = new Float32Array(cols*rows);
+  for (let j=0;j<rows;j++) for (let i=0;i<cols;i++){
+    const r = 1 - Math.abs(fbm(noise, i*0.06, j*0.06, 3));
+    riverField[j*cols+i] = r;
+  }
+  // shore contour (wider)
+  const shorePaths = marchingSquares(riverField, cols, rows, 0.90);
+  const gShore = document.createElementNS(SVG_NS, 'g');
+  for (const chain of shorePaths){
+    if (chain.length < 6) continue;
+    const d = smoothPath(chain, cell, cell, true);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', PALETTE.shoreLight);
+    path.setAttribute('stroke', PALETTE.shoreDark);
+    path.setAttribute('stroke-width', '0.8');
+    path.setAttribute('opacity', '0.85');
+    gShore.appendChild(path);
+  }
+  svg.appendChild(gShore);
+  // river body
+  const riverPaths = marchingSquares(riverField, cols, rows, 0.93);
+  const gRiver = document.createElementNS(SVG_NS, 'g');
+  gRiver.setAttribute('filter', 'url(#watery)');
+  for (const chain of riverPaths){
+    if (chain.length < 6) continue;
+    const d = smoothPath(chain, cell, cell, true);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', PALETTE.river);
+    path.setAttribute('stroke', PALETTE.riverDeep);
+    path.setAttribute('stroke-width', '0.6');
+    gRiver.appendChild(path);
+  }
+  svg.appendChild(gRiver);
+  // river highlights (deep)
+  const deepPaths = marchingSquares(riverField, cols, rows, 0.965);
+  const gDeep = document.createElementNS(SVG_NS, 'g');
+  gDeep.setAttribute('filter', 'url(#watery)');
+  for (const chain of deepPaths){
+    if (chain.length < 4) continue;
+    const d = smoothPath(chain, cell, cell, true);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', PALETTE.riverDeep);
+    gDeep.appendChild(path);
+  }
+  svg.appendChild(gDeep);
+
+  // wavelet highlights on the river: short white strokes
+  const gWaves = document.createElementNS(SVG_NS, 'g');
+  const rng = mulberry32(currentSeed ^ 0xfeed);
+  for (let attempts=0; attempts<3000; attempts++){
+    const x = rng()*W, y = rng()*H;
+    const gi = Math.floor(x / cell), gj = Math.floor(y / cell);
+    if (gi<0||gj<0||gi>=cols||gj>=rows) continue;
+    if (riverField[gj*cols+gi] < 0.92) continue;
+    const len = 3 + rng()*4;
+    const ang = -0.1 + (rng()-.5)*0.4;
+    const x2 = x + Math.cos(ang)*len, y2 = y + Math.sin(ang)*len;
+    const line = document.createElementNS(SVG_NS, 'line');
+    line.setAttribute('x1', x.toFixed(1)); line.setAttribute('y1', y.toFixed(1));
+    line.setAttribute('x2', x2.toFixed(1)); line.setAttribute('y2', y2.toFixed(1));
+    line.setAttribute('stroke', PALETTE.riverHi);
+    line.setAttribute('stroke-width', '0.9');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('opacity', '0.7');
+    gWaves.appendChild(line);
+  }
+  svg.appendChild(gWaves);
+
+  // ----- DECORATIONS: trees + bushes clustered by noise2 -----
+  const gDecor = document.createElementNS(SVG_NS, 'g');
+  const treeRng = mulberry32(currentSeed ^ 0x12345);
+  const placed = [];
+  for (let attempts=0; attempts<8000; attempts++){
+    const x = treeRng()*W, y = treeRng()*H;
+    const gi = Math.floor(x / cell), gj = Math.floor(y / cell);
+    if (gi<0||gj<0||gi>=cols||gj>=rows) continue;
+    // not on water/shore
+    if (riverField[gj*cols+gi] > 0.89) continue;
+    // cluster gate
+    const tg = fbm(noise2, x*0.005+8, y*0.005-3, 3);
+    if (tg < 0.0) continue;
+    // poisson-disk-ish min spacing
+    let ok = true;
+    for (const q of placed){
+      const dx = q.x - x, dy = q.y - y;
+      if (dx*dx + dy*dy < 22*22){ ok = false; break; }
+    }
+    if (!ok) continue;
+    // sometimes bush
+    const isBush = treeRng() < 0.35;
+    const sym = isBush ? 'bush' : 'tree';
+    const size = isBush ? 16 + treeRng()*8 : 26 + treeRng()*14;
+    const use = document.createElementNS(SVG_NS, 'use');
+    use.setAttribute('href', `#${sym}`);
+    use.setAttribute('x', (x - size/2).toFixed(1));
+    use.setAttribute('y', (y - size/2).toFixed(1));
+    use.setAttribute('width', size.toFixed(1));
+    use.setAttribute('height', size.toFixed(1));
+    gDecor.appendChild(use);
+    placed.push({x, y});
+    if (placed.length > 320) break;
+  }
+  svg.appendChild(gDecor);
+
+  // ----- FLOWERS (small specks scattered, more dense where grass is light) -----
+  const gFlow = document.createElementNS(SVG_NS, 'g');
+  const fRng = mulberry32(currentSeed ^ 0x9876);
+  for (let k=0;k<400;k++){
+    const x = fRng()*W, y = fRng()*H;
+    const gi = Math.floor(x / cell), gj = Math.floor(y / cell);
+    if (gi<0||gj<0||gi>=cols||gj>=rows) continue;
+    if (riverField[gj*cols+gi] > 0.89) continue;
+    if (grassField[gj*cols+gi] > 0.0) continue; // prefer lighter grass
+    const r = fRng();
+    const col = r < .4 ? PALETTE.flowerR : r < .75 ? PALETTE.flowerY : PALETTE.flowerW;
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('cx', x.toFixed(1)); dot.setAttribute('cy', y.toFixed(1));
+    dot.setAttribute('r', '1.6');
+    dot.setAttribute('fill', col);
+    gFlow.appendChild(dot);
+  }
+  svg.appendChild(gFlow);
+
+  // ----- INK CONTOUR LINES (very faint, ‘mapa de campo’ feel) -----
+  const gInk = document.createElementNS(SVG_NS, 'g');
+  for (const T of [0.0, 0.18, 0.35]){
+    const lines = marchingSquares(grassField, cols, rows, T);
+    for (const chain of lines){
+      if (chain.length < 6) continue;
+      const d = smoothPath(chain, cell, cell, false);
+      const p = document.createElementNS(SVG_NS, 'path');
+      p.setAttribute('d', d);
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', PALETTE.ink);
+      p.setAttribute('stroke-width', '0.4');
+      p.setAttribute('opacity', '0.08');
+      gInk.appendChild(p);
+    }
+  }
+  svg.appendChild(gInk);
+
+  // grain overlay
+  const grain = document.createElementNS(SVG_NS, 'rect');
+  grain.setAttribute('width', W); grain.setAttribute('height', H);
+  grain.setAttribute('fill', 'transparent');
+  grain.setAttribute('filter', 'url(#grainy)');
+  svg.appendChild(grain);
+}
+
+buildSVG(currentSeed);
+let resizeTO=null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTO); resizeTO = setTimeout(() => buildSVG(currentSeed), 120);
+});
+document.getElementById('reseed').addEventListener('click', () => buildSVG(Math.floor(Math.random()*1e6)));
+
+/* ---------- Audio ---------- */
+class Ambient {
+  constructor(){ this.ac=null; this.master=null; this.muted=false; }
+  start(){
+    if (this.ac) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ac = new AC(); const ac = this.ac;
+    this.master = ac.createGain(); this.master.gain.value=0;
+    this.master.connect(ac.destination);
+    this.master.gain.linearRampToValueAtTime(.55, ac.currentTime+1.2);
+    const bs = 2 * ac.sampleRate;
+    // wind
+    const wb = ac.createBuffer(1, bs, ac.sampleRate); const wd = wb.getChannelData(0);
+    let b0=0,b1=0,b2=0;
+    for (let i=0;i<bs;i++){ const w = Math.random()*2-1; b0=0.99765*b0+w*0.099046; b1=0.96300*b1+w*0.296516; b2=0.57000*b2+w*1.052691; wd[i]=(b0+b1+b2+w*0.1848)*0.08; }
+    const wsrc = ac.createBufferSource(); wsrc.buffer=wb; wsrc.loop=true;
+    const wlp = ac.createBiquadFilter(); wlp.type='lowpass'; wlp.frequency.value=480;
+    const wg = ac.createGain(); wg.gain.value=.40;
+    const lfo = ac.createOscillator(); lfo.frequency.value=.08;
+    const lfoG = ac.createGain(); lfoG.gain.value=.18;
+    lfo.connect(lfoG).connect(wg.gain); lfo.start();
+    wsrc.connect(wlp).connect(wg).connect(this.master); wsrc.start();
+    // birds: melodic phrases
+    const bird = () => {
+      if (!this.ac) return;
+      if (!this.muted){
+        const t = ac.currentTime;
+        const base = 1500 + Math.random()*1500;
+        const notes = 3 + Math.floor(Math.random()*4);
+        for (let k=0;k<notes;k++){
+          const t2 = t + k*0.13;
+          const o = ac.createOscillator(); o.type='sine';
+          const f = base * (0.85 + Math.random()*0.6);
+          o.frequency.setValueAtTime(f, t2);
+          o.frequency.exponentialRampToValueAtTime(f*1.3, t2+.05);
+          o.frequency.exponentialRampToValueAtTime(f*0.95, t2+.10);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0, t2);
+          g.gain.linearRampToValueAtTime(.055, t2+.005);
+          g.gain.exponentialRampToValueAtTime(.0001, t2+.12);
+          o.connect(g).connect(this.master);
+          o.start(t2); o.stop(t2+.13);
+        }
+      }
+      setTimeout(bird, 2800 + Math.random()*4500);
+    };
+    setTimeout(bird, 1800);
+  }
+  toggleMute(){ if(!this.ac)return; this.muted=!this.muted; this.master.gain.cancelScheduledValues(this.ac.currentTime); this.master.gain.linearRampToValueAtTime(this.muted?0:.55, this.ac.currentTime+.4); }
+}
+const ambient = new Ambient();
+const overlay = document.getElementById('overlay');
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); ambient.start(); });
+document.getElementById('mute').addEventListener('click', e => { ambient.toggleMute(); e.target.textContent = ambient.muted ? 'unmute' : 'mute'; });
+</script>
+</body>
+</html>

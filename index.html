@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pruebas · hierba y ríos generativos</title>
+<style>
+  :root { color-scheme: dark; }
+  *{ box-sizing: border-box; }
+  html, body { margin:0; padding:0; min-height:100%; background:#0e140e; color:#e8f0d8; font-family: ui-monospace, Menlo, monospace; }
+  body { padding: 48px 32px 64px; }
+  header { max-width: 1100px; margin: 0 auto 36px; }
+  header h1 { margin: 0 0 .6rem; font-size: 1.1rem; letter-spacing:.2em; font-weight: 600; }
+  header p { margin: 0; opacity: .65; font-size: .85rem; max-width: 680px; line-height: 1.5; }
+  header .meta { margin-top: 10px; font-size: .72rem; opacity: .45; }
+
+  .grid {
+    max-width: 1100px; margin: 0 auto;
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .card {
+    background: #141c14; border: 1px solid #2a3a24;
+    display: block; text-decoration: none; color: inherit;
+    transition: transform .15s, border-color .15s, background .15s;
+    overflow: hidden;
+  }
+  .card:hover { border-color: #5a8a4a; background: #1a241a; transform: translateY(-2px); }
+  .card iframe {
+    width: 100%; height: 170px; border: 0; pointer-events: none; background: #0a0e0a;
+    display: block;
+  }
+  .card .body { padding: 14px 16px 16px; }
+  .num { font-size: .68rem; opacity: .45; letter-spacing: .15em; }
+  .title { font-size: .98rem; margin: 4px 0 8px; letter-spacing: .03em; }
+  .desc { font-size: .78rem; opacity: .65; line-height: 1.45; margin: 0 0 10px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; font-size: .65rem; }
+  .tag { padding: 3px 7px; border: 1px solid #3a5a3a; color: #aacf90; opacity:.9; }
+  .tag.lib { color:#cf90c0; border-color:#5a3a5a; }
+  .tag.aud { color:#90c0cf; border-color:#3a4a5a; }
+
+  footer { max-width: 1100px; margin: 40px auto 0; font-size: .7rem; opacity: .4; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>HIERBA Y RÍOS · 7 PRUEBAS GENERATIVAS</h1>
+  <p>Exploración técnica de un fondo generativo para web. Cada prueba ataca el problema desde una estética y stack distintos. Todas son responsive, con audio procedural (Web Audio API, sin samples) y un seed que se puede regenerar.</p>
+  <div class="meta">click una tarjeta · cada prueba abre en pantalla completa</div>
+</header>
+
+<div class="grid">
+  <a class="card" href="prueba-1-canvas-pixel-iso.html">
+    <iframe src="prueba-1-canvas-pixel-iso.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 01</div>
+      <div class="title">Canvas 2D pixel iso</div>
+      <p class="desc">Tiles isométricos pixel-art al estilo Sims. Auto-tiling, decoración con árboles/arbustos.</p>
+      <div class="tags">
+        <span class="tag lib">vanilla JS</span>
+        <span class="tag">isométrico</span>
+        <span class="tag">pixel art</span>
+        <span class="tag aud">agua + grillos</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="card" href="prueba-2-pixi-shaders.html">
+    <iframe src="prueba-2-pixi-shaders.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 02</div>
+      <div class="title">Pixi.js + GLSL shaders</div>
+      <p class="desc">Escena top-down dibujada enteramente en un fragment shader. Viento, flujo de agua y sparkles animados.</p>
+      <div class="tags">
+        <span class="tag lib">Pixi.js · GLSL</span>
+        <span class="tag">animado</span>
+        <span class="tag aud">viento + pájaros</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="card" href="prueba-3-threejs-3d.html">
+    <iframe src="prueba-3-threejs-3d.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 03</div>
+      <div class="title">Three.js 3D realista</div>
+      <p class="desc">Terreno 3D real con heightmap, briznas de hierba instanciadas que se mecen, agua con shader.</p>
+      <div class="tags">
+        <span class="tag lib">Three.js</span>
+        <span class="tag">3D · ortho iso</span>
+        <span class="tag aud">río + birds</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="card" href="prueba-4-p5-acuarela.html">
+    <iframe src="prueba-4-p5-acuarela.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 04</div>
+      <div class="title">p5.js acuarela</div>
+      <p class="desc">Painterly watercolor: pinceladas, manchas aguadas, ríos con bordes bleed. Look ilustrado.</p>
+      <div class="tags">
+        <span class="tag lib">p5.js</span>
+        <span class="tag">acuarela</span>
+        <span class="tag aud">drone + agua</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="card" href="prueba-5-svg-vectorial.html">
+    <iframe src="prueba-5-svg-vectorial.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 05</div>
+      <div class="title">SVG vectorial</div>
+      <p class="desc">Marching squares para contornos de río, patrones SVG para hierba, filtros de turbulencia para textura.</p>
+      <div class="tags">
+        <span class="tag lib">SVG nativo</span>
+        <span class="tag">vectorial</span>
+        <span class="tag aud">viento + birds</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="card" href="prueba-6-roughjs-ilustrado.html">
+    <iframe src="prueba-6-roughjs-ilustrado.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 06</div>
+      <div class="title">rough.js ilustrado a mano</div>
+      <p class="desc">Líneas sketchy, fills hachured. Estética mapa-de-parque hecho a mano con árboles y senderos.</p>
+      <div class="tags">
+        <span class="tag lib">rough.js</span>
+        <span class="tag">hand-drawn</span>
+        <span class="tag aud">park birds</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="card" href="prueba-7-y2k-tropical.html">
+    <iframe src="prueba-7-y2k-tropical.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 07</div>
+      <div class="title">Y2K tropical paradise ★</div>
+      <p class="desc">Canvas + CSS maximalista. Caustics de agua, palmeras, marquee chrome, badges "Click Here", contador.</p>
+      <div class="tags">
+        <span class="tag lib">canvas + CSS</span>
+        <span class="tag">webcore Y2K</span>
+        <span class="tag aud">synth pad + dolphins</span>
+      </div>
+    </div>
+  </a>
+</div>
+
+<footer>
+  Cada prueba es self-contained. Botón <em>nuevo seed</em> regenera el mapa · <em>mute</em> silencia · click en la pantalla inicia.
+</footer>
+
+</body>
+</html>
