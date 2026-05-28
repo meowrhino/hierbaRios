@@ -14,12 +14,6 @@
   header p { margin: 0; opacity: .65; font-size: .85rem; max-width: 720px; line-height: 1.5; }
   header .meta { margin-top: 10px; font-size: .72rem; opacity: .45; }
 
-  h2 {
-    max-width: 1200px; margin: 36px auto 14px;
-    font-size: .78rem; letter-spacing:.2em; opacity:.55; font-weight: 500;
-    padding-top: 18px; border-top: 1px dashed #2a3a24;
-  }
-
   .grid {
     max-width: 1200px; margin: 0 auto;
     display: grid; gap: 20px;
@@ -52,12 +46,11 @@
 <body>
 
 <header>
-  <h1>HIERBA Y RÍOS · 12 PRUEBAS GENERATIVAS</h1>
+  <h1>HIERBA Y RÍOS · PRUEBAS GENERATIVAS</h1>
   <p>Exploración técnica de un fondo generativo para web. Cada prueba ataca el problema desde una estética y stack distintos. Todas son responsive, con audio procedural (Web Audio API, sin samples) y un seed regenerable.</p>
   <div class="meta">click una tarjeta · cada prueba abre en pantalla completa · botón <em>nuevo seed</em> regenera</div>
 </header>
 
-<h2>VIDEOJUEGO / PIXEL</h2>
 <div class="grid">
   <a class="card" href="prueba-1-canvas-pixel-iso.html">
     <iframe src="prueba-1-canvas-pixel-iso.html" loading="lazy" scrolling="no"></iframe>
@@ -77,10 +70,6 @@
       <div class="tags"><span class="tag lib">Pixi.js · GLSL</span><span class="tag">animado</span><span class="tag aud">viento + birds</span></div>
     </div>
   </a>
-</div>
-
-<h2>3D / REALISTA</h2>
-<div class="grid">
   <a class="card" href="prueba-3-threejs-3d.html">
     <iframe src="prueba-3-threejs-3d.html" loading="lazy" scrolling="no"></iframe>
     <div class="body">
@@ -90,42 +79,11 @@
       <div class="tags"><span class="tag lib">Three.js</span><span class="tag">3D ortho iso</span><span class="tag aud">río + birds</span></div>
     </div>
   </a>
-  <a class="card" href="prueba-8-three-iso-shader.html">
-    <iframe src="prueba-8-three-iso-shader.html" loading="lazy" scrolling="no"></iframe>
-    <div class="body">
-      <div class="num">PRUEBA 08</div>
-      <div class="title">Three.js iso + shaders animados <span class="tag new">nuevo</span></div>
-      <p class="desc">Híbrido 02+03: perspectiva iso 3D con todo el terreno animado en GLSL. Agua fluyendo, dappled light, briznas con sway.</p>
-      <div class="tags"><span class="tag lib">Three.js · GLSL</span><span class="tag">iso animado</span><span class="tag aud">viento + agua</span></div>
-    </div>
-  </a>
-  <a class="card" href="prueba-11-forest-hex.html">
-    <iframe src="prueba-11-forest-hex.html" loading="lazy" scrolling="no"></iframe>
-    <div class="body">
-      <div class="num">PRUEBA 11</div>
-      <div class="title">Forest hex-tile <span class="tag new">nuevo</span></div>
-      <p class="desc">Inspirado en la app Forest: hexágonos flotantes con clusters de árboles. Multi-bioma (grass, forest, blossom, autumn, snow, water, flower).</p>
-      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">hex tiles</span><span class="tag aud">forest pad</span></div>
-    </div>
-  </a>
-  <a class="card" href="prueba-12-three-cerezos.html">
-    <iframe src="prueba-12-three-cerezos.html" loading="lazy" scrolling="no"></iframe>
-    <div class="body">
-      <div class="num">PRUEBA 12</div>
-      <div class="title">Three.js cerezos en flor <span class="tag new">nuevo</span></div>
-      <p class="desc">Variante estacional de 03: cerezos rosados, pétalos cayendo (particles), agua púrpura, koto-like pluck.</p>
-      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">primavera</span><span class="tag aud">pad + koto</span></div>
-    </div>
-  </a>
-</div>
-
-<h2>DISEÑO / ARTE</h2>
-<div class="grid">
   <a class="card" href="prueba-4-p5-acuarela.html">
     <iframe src="prueba-4-p5-acuarela.html" loading="lazy" scrolling="no"></iframe>
     <div class="body">
       <div class="num">PRUEBA 04</div>
-      <div class="title">p5.js acuarela <span class="tag new">arreglado</span></div>
+      <div class="title">p5.js acuarela</div>
       <p class="desc">Painterly watercolor: pinceladas, manchas aguadas, ríos con bordes bleed. Composición rebuild con washes claros.</p>
       <div class="tags"><span class="tag lib">p5.js</span><span class="tag">acuarela</span><span class="tag aud">drone + agua</span></div>
     </div>
@@ -139,10 +97,6 @@
       <div class="tags"><span class="tag lib">SVG nativo</span><span class="tag">vectorial</span><span class="tag aud">viento + birds</span></div>
     </div>
   </a>
-</div>
-
-<h2>ILUSTRADO A MANO</h2>
-<div class="grid">
   <a class="card" href="prueba-6-roughjs-ilustrado.html">
     <iframe src="prueba-6-roughjs-ilustrado.html" loading="lazy" scrolling="no"></iframe>
     <div class="body">
@@ -152,28 +106,6 @@
       <div class="tags"><span class="tag lib">rough.js</span><span class="tag">hand-drawn</span><span class="tag aud">park birds</span></div>
     </div>
   </a>
-  <a class="card" href="prueba-9-roughjs-bosque.html">
-    <iframe src="prueba-9-roughjs-bosque.html" loading="lazy" scrolling="no"></iframe>
-    <div class="body">
-      <div class="num">PRUEBA 09</div>
-      <div class="title">rough.js bosque denso <span class="tag new">nuevo</span></div>
-      <p class="desc">Sin río — estanque pequeño y selva. Coníferas, broadleaf, setas, troncos caídos. Más denso y silvestre que la 06.</p>
-      <div class="tags"><span class="tag lib">rough.js</span><span class="tag">bosque</span><span class="tag aud">owl + wind</span></div>
-    </div>
-  </a>
-  <a class="card" href="prueba-10-roughjs-noche.html">
-    <iframe src="prueba-10-roughjs-noche.html" loading="lazy" scrolling="no"></iframe>
-    <div class="body">
-      <div class="num">PRUEBA 10</div>
-      <div class="title">rough.js nocturno <span class="tag new">nuevo</span></div>
-      <p class="desc">Paleta noche: luna que ilumina el río, linternas con halo, luciérnagas animadas. Coros de grillos y croar de ranas.</p>
-      <div class="tags"><span class="tag lib">rough.js · canvas</span><span class="tag">noche</span><span class="tag aud">crickets + frogs</span></div>
-    </div>
-  </a>
-</div>
-
-<h2>Y2K / WEB-CULTURE</h2>
-<div class="grid">
   <a class="card" href="prueba-7-y2k-tropical.html">
     <iframe src="prueba-7-y2k-tropical.html" loading="lazy" scrolling="no"></iframe>
     <div class="body">
@@ -187,9 +119,135 @@
     <iframe src="prueba-7b-y2k-clean.html" loading="lazy" scrolling="no"></iframe>
     <div class="body">
       <div class="num">PRUEBA 07B</div>
-      <div class="title">Y2K paradise (limpio) <span class="tag new">nuevo</span></div>
+      <div class="title">Y2K paradise (limpio)</div>
       <p class="desc">Solo el fondo: islas + palmeras + agua con caustics. Sin marquee, badges, ni contador. Más usable como fondo real.</p>
       <div class="tags"><span class="tag lib">canvas</span><span class="tag">paradise</span><span class="tag aud">synth pad</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-8-three-iso-shader.html">
+    <iframe src="prueba-8-three-iso-shader.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 08</div>
+      <div class="title">Three.js iso + shaders animados</div>
+      <p class="desc">Híbrido 02+03: perspectiva iso 3D con todo el terreno animado en GLSL. Agua fluyendo, dappled light, briznas con sway.</p>
+      <div class="tags"><span class="tag lib">Three.js · GLSL</span><span class="tag">iso animado</span><span class="tag aud">viento + agua</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-9-roughjs-bosque.html">
+    <iframe src="prueba-9-roughjs-bosque.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 09</div>
+      <div class="title">rough.js bosque denso</div>
+      <p class="desc">Sin río — estanque pequeño y selva. Coníferas, broadleaf, setas, troncos caídos. Más denso y silvestre que la 06.</p>
+      <div class="tags"><span class="tag lib">rough.js</span><span class="tag">bosque</span><span class="tag aud">owl + wind</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-10-roughjs-noche.html">
+    <iframe src="prueba-10-roughjs-noche.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 10</div>
+      <div class="title">rough.js nocturno</div>
+      <p class="desc">Paleta noche: luna que ilumina el río, linternas con halo, luciérnagas animadas. Coros de grillos y croar de ranas.</p>
+      <div class="tags"><span class="tag lib">rough.js · canvas</span><span class="tag">noche</span><span class="tag aud">crickets + frogs</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-11-forest-hex.html">
+    <iframe src="prueba-11-forest-hex.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 11</div>
+      <div class="title">Forest hex-tile</div>
+      <p class="desc">Inspirado en la app Forest: hexágonos flotantes con clusters de árboles. Multi-bioma (grass, forest, blossom, autumn, snow, water, flower).</p>
+      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">hex tiles</span><span class="tag aud">forest pad</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-12-three-cerezos.html">
+    <iframe src="prueba-12-three-cerezos.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 12</div>
+      <div class="title">Three.js cerezos en flor</div>
+      <p class="desc">Variante estacional de 03: cerezos rosados, pétalos cayendo (particles), agua púrpura, koto-like pluck.</p>
+      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">primavera</span><span class="tag aud">pad + koto</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-13-canvas-aldea-romana.html">
+    <iframe src="prueba-13-canvas-aldea-romana.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 13</div>
+      <div class="title">Aldea romana dispersa <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 01 con casitas pixel art estilo Imperium dispersas entre la vegetación: muros beige, tejados terracota a dos aguas.</p>
+      <div class="tags"><span class="tag lib">vanilla JS</span><span class="tag">pixel iso</span><span class="tag aud">grillos</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-14-canvas-foro-monumental.html">
+    <iframe src="prueba-14-canvas-foro-monumental.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 14</div>
+      <div class="title">Foro monumental <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 01 con tres edificios monumentales centrales: templo con columnata, foro/basílica con arcos, anfiteatro oval.</p>
+      <div class="tags"><span class="tag lib">vanilla JS</span><span class="tag">pixel iso</span><span class="tag aud">grillos</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-15-canvas-ciudad-amurallada.html">
+    <iframe src="prueba-15-canvas-ciudad-amurallada.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 15</div>
+      <div class="title">Ciudad amurallada <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 01 con muralla rectangular, dos puertas con torres, insulae en grid alrededor del foro central con fuente.</p>
+      <div class="tags"><span class="tag lib">vanilla JS</span><span class="tag">pixel iso</span><span class="tag aud">grillos</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-16-pixi-edificios-fractales.html">
+    <iframe src="prueba-16-pixi-edificios-fractales.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 16</div>
+      <div class="title">Edificios fractales (shader) <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 02: el shader detecta zonas "ciudad" y dibuja manzanas con calles, tejados terracota cenitales, patios mármol e impluvios.</p>
+      <div class="tags"><span class="tag lib">Pixi.js · GLSL</span><span class="tag">procedural</span><span class="tag aud">viento</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-17-pixi-mosaico-romano.html">
+    <iframe src="prueba-17-pixi-mosaico-romano.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 17</div>
+      <div class="title">Mosaico romano <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 02 reinterpretada como mosaico de teselas: foro estilizado central, dos villas laterales, marco con greca/meandro dorado.</p>
+      <div class="tags"><span class="tag lib">Pixi.js · GLSL</span><span class="tag">mosaico</span><span class="tag aud">viento</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-18-pixi-shader-sprites.html">
+    <iframe src="prueba-18-pixi-shader-sprites.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 18</div>
+      <div class="title">Shader + sprites <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 02 híbrida: el shader pinta el terreno, sprites pixel art de casitas e insulae se posicionan reusando el mismo noise.</p>
+      <div class="tags"><span class="tag lib">Pixi.js · GLSL</span><span class="tag">híbrido</span><span class="tag aud">viento</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-19-three-aldea-lowpoly.html">
+    <iframe src="prueba-19-three-aldea-lowpoly.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 19</div>
+      <div class="title">Aldea low-poly 3D <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 03 con casitas low-poly instanciadas: cajas beige con tejado prismático terracota, dispersas en zonas planas.</p>
+      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">low-poly</span><span class="tag aud">río + birds</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-20-three-urbe-grid.html">
+    <iframe src="prueba-20-three-urbe-grid.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 20</div>
+      <div class="title">Urbe romana en grid <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 03 con terreno aplanado en una zona central: insulae en grid, cardo y decumanus marcados, templo monumental en el foro.</p>
+      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">city builder</span><span class="tag aud">río + birds</span></div>
+    </div>
+  </a>
+  <a class="card" href="prueba-21-three-monumentos.html">
+    <iframe src="prueba-21-three-monumentos.html" loading="lazy" scrolling="no"></iframe>
+    <div class="body">
+      <div class="num">PRUEBA 21</div>
+      <div class="title">Monumentos romanos <span class="tag new">imperium</span></div>
+      <p class="desc">Variante de 03 monumental: tres edificios grandes en zonas planas — templo con columnata, anfiteatro oval con anillos, arco triunfal con cuadriga dorada.</p>
+      <div class="tags"><span class="tag lib">Three.js</span><span class="tag">monumental</span><span class="tag aud">río + birds</span></div>
     </div>
   </a>
 </div>

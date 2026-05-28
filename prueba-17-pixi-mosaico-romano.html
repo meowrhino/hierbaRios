@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prueba 17 · Mosaico romano (pixi · shader)</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#0a120a; overflow:hidden; font-family: ui-monospace, Menlo, monospace; color:#dfeacf; }
+  #app canvas { display:block; width:100vw !important; height:100vh !important; image-rendering: pixelated; }
+  #overlay {
+    position: fixed; inset: 0; background: rgba(8,12,8,.86); backdrop-filter: blur(6px);
+    display: grid; place-items: center; cursor: pointer; z-index: 10; transition: opacity .4s;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .card { text-align:center; padding:2rem 3rem; border:1px solid #3a5a3a; background:#0e140e; }
+  #overlay h1 { margin:0 0 .8rem; font-size:1rem; letter-spacing:.2em; }
+  #overlay p { margin:.2rem 0; font-size:.8rem; opacity:.7; }
+  #hud { position: fixed; left:12px; bottom:10px; font-size:11px; opacity:.6; z-index:5; text-shadow: 0 1px 0 #000; }
+  #hud button { background:#0e140e; color:#dfeacf; border:1px solid #3a5a3a; font:inherit; padding:4px 8px; margin-left:6px; cursor:pointer; }
+  #hud button:hover { background:#1c2a1c; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="overlay">
+  <div class="card">
+    <h1>PRUEBA 17 — MOSAICO ROMANO</h1>
+    <p>shader · terreno como tapiz con meandros · edificios estilo emblema</p>
+    <p>click para empezar</p>
+  </div>
+</div>
+<div id="hud">
+  seed <span id="seedView">—</span>
+  <button id="reseed">nuevo seed</button>
+  <button id="mute">mute</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.0/dist/pixi.min.js"></script>
+<script>
+/* ============================================================
+   Pixi.js v7 + custom GLSL shader rendering the entire scene.
+   Top-down stylised landscape: pixel-quantised noise terrain,
+   animated wind sway on grass, flowing water, drifting clouds.
+   ============================================================ */
+
+const vert = /* glsl */`
+  precision mediump float;
+  attribute vec2 aVertexPosition;
+  attribute vec2 aUvs;
+  uniform mat3 projectionMatrix;
+  varying vec2 vUvs;
+  void main(){
+    vUvs = aUvs;
+    gl_Position = vec4((projectionMatrix * vec3(aVertexPosition, 1.0)).xy, 0.0, 1.0);
+  }
+`;
+
+const frag = /* glsl */`
+  precision highp float;
+  varying vec2 vUvs;
+  uniform vec2  uRes;
+  uniform float uTime;
+  uniform float uSeed;
+  uniform float uPixel;   // pixel chunkiness
+  uniform float uWind;    // wind intensity 0..1
+
+  // ----- hash & noise (Inigo Quilez style, value noise + fbm) -----
+  float hash21(vec2 p){
+    p = fract(p * vec2(123.34, 456.21) + uSeed);
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+  float vnoise(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0,0.0));
+    float c = hash21(i + vec2(0.0,1.0));
+    float d = hash21(i + vec2(1.0,1.0));
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+  }
+  float fbm(vec2 p){
+    float v = 0.0; float a = 0.5;
+    mat2 rot = mat2(0.8, -0.6, 0.6, 0.8);
+    for (int i = 0; i < 5; i++){
+      v += a * vnoise(p);
+      p = rot * p * 2.02;
+      a *= 0.5;
+    }
+    return v;
+  }
+  // ridged for rivers
+  float ridge(vec2 p){ return 1.0 - abs(fbm(p)*2.0 - 1.0); }
+
+  vec3 paletteGrass(float t){
+    // limited palette grading by lightness
+    vec3 c1 = vec3(0.13,0.27,0.10);
+    vec3 c2 = vec3(0.18,0.36,0.13);
+    vec3 c3 = vec3(0.28,0.50,0.20);
+    vec3 c4 = vec3(0.42,0.66,0.27);
+    vec3 c5 = vec3(0.56,0.78,0.36);
+    if (t < 0.2) return c1;
+    if (t < 0.45) return c2;
+    if (t < 0.7) return c3;
+    if (t < 0.88) return c4;
+    return c5;
+  }
+
+  void main(){
+    vec2 fragCoord = vUvs * uRes;
+    // teselas finas (mosaico real, piedrecitas pequeñas)
+    float TESS = 3.0;
+    vec2 p = floor(fragCoord / TESS) * TESS;
+    vec2 w = (p - uRes*0.5) / uRes.y;
+
+    float t = uTime;
+
+    // ---- terrain field (igual pero menos animado: el mosaico es estático) ----
+    vec2 wp = w * 2.6;
+    float continent = fbm(wp * 0.7 + vec2(uSeed*0.013, -uSeed*0.007));
+    float rivers = ridge(w * 2.2 + vec2(uSeed*0.0091, uSeed*0.011));
+    float moisture = fbm(w * 1.4 + vec2(2.3, -5.1));
+
+    bool isRiver = rivers > 0.90;
+    bool isDeep  = rivers > 0.95;
+    bool isShore = rivers > 0.86 && rivers <= 0.90;
+
+    vec3 col;
+    // colores de paleta mosaico (4 tonos por bioma para variación tipo
+    // teselas reales, todos cálidos y terrosos como un mosaico romano)
+    if (isDeep){
+      // mar / piscina: teselas azules (vidrio)
+      float v = hash21(p);
+      vec3 c1 = vec3(0.10,0.22,0.36);
+      vec3 c2 = vec3(0.14,0.30,0.46);
+      vec3 c3 = vec3(0.20,0.40,0.58);
+      vec3 c4 = vec3(0.07,0.16,0.28);
+      if (v < 0.25)      col = c1;
+      else if (v < 0.55) col = c2;
+      else if (v < 0.85) col = c3;
+      else               col = c4;
+      // brillo ocasional (oro)
+      if (v > 0.97) col = vec3(0.85,0.70,0.32);
+    } else if (isRiver){
+      float v = hash21(p);
+      vec3 c1 = vec3(0.18,0.34,0.50);
+      vec3 c2 = vec3(0.26,0.46,0.62);
+      vec3 c3 = vec3(0.36,0.58,0.72);
+      vec3 c4 = vec3(0.14,0.26,0.40);
+      if (v < 0.25)      col = c1;
+      else if (v < 0.55) col = c2;
+      else if (v < 0.85) col = c3;
+      else               col = c4;
+    } else if (isShore){
+      // teselas crema/sand
+      float v = hash21(p);
+      vec3 c1 = vec3(0.78,0.66,0.42);
+      vec3 c2 = vec3(0.86,0.74,0.50);
+      vec3 c3 = vec3(0.70,0.58,0.36);
+      vec3 c4 = vec3(0.92,0.82,0.60);
+      if (v < 0.30)      col = c1;
+      else if (v < 0.60) col = c2;
+      else if (v < 0.85) col = c3;
+      else               col = c4;
+    } else {
+      // GRASS como tapiz: teselas verdes oliva en 4 tonos
+      float v = hash21(p);
+      vec3 c1 = vec3(0.20,0.32,0.16);
+      vec3 c2 = vec3(0.28,0.42,0.20);
+      vec3 c3 = vec3(0.36,0.50,0.24);
+      vec3 c4 = vec3(0.42,0.58,0.30);
+      if (v < 0.30)      col = c1;
+      else if (v < 0.60) col = c2;
+      else if (v < 0.85) col = c3;
+      else               col = c4;
+    }
+
+    // --- EDIFICIOS como "emblema" central del mosaico ---
+    // Un foro estilizado: rectángulo de muros beige con tejado terracota
+    // a dos aguas representado como dos triángulos cenitales rojos.
+    // Posición en coordenadas w (centrado), tamaño relativo al viewport.
+    vec2 forumCenter = vec2(0.0, 0.0);
+    vec2 d = w - forumCenter;
+    float fw = 0.35, fh = 0.22; // semi-anchura/altura del rect
+    if (abs(d.x) < fw && abs(d.y) < fh){
+      // dentro del rectángulo del foro
+      // base muros: beige claro/oscuro según mitad superior/inferior
+      bool topHalf = d.y < 0.0;
+      vec3 muroL = vec3(0.85,0.78,0.62);
+      vec3 muroD = vec3(0.65,0.58,0.42);
+      col = topHalf ? muroL : muroD;
+      // techo a dos aguas: dos triángulos terracota en la franja central
+      // (representamos el tejado como un romboide)
+      if (abs(d.y) < fh*0.45){
+        float roofY = abs(d.y) / (fh*0.45);
+        col = mix(vec3(0.55,0.20,0.13), vec3(0.78,0.30,0.20), 1.0 - roofY);
+      }
+      // cumbrera horizontal (línea oscura)
+      if (abs(d.y) < 0.005){
+        col = vec3(0.32,0.10,0.06);
+      }
+      // columnas: 5 marcas verticales blancas a la base
+      if (abs(d.y) > fh*0.55 && abs(d.y) < fh*0.85){
+        float colSpacing = fw * 0.4;
+        float colX = mod(d.x + fw, colSpacing);
+        if (colX < 0.01){
+          col = vec3(0.92,0.88,0.78);
+        }
+      }
+    }
+
+    // Edificios secundarios: 2 villas más pequeñas a los lados, simétricas
+    for (int side = 0; side < 2; side++){
+      float sx = side == 0 ? -0.55 : 0.55;
+      vec2 ds = w - vec2(sx, 0.08);
+      float vw = 0.12, vh = 0.10;
+      if (abs(ds.x) < vw && abs(ds.y) < vh){
+        bool top = ds.y < 0.0;
+        col = top ? vec3(0.78,0.30,0.20) : vec3(0.85,0.78,0.62);
+        if (abs(ds.y) < 0.004) col = vec3(0.32,0.10,0.06);
+      }
+    }
+
+    // --- GRECA (meandro) decorativa en el borde del viewport ---
+    // Banda estrecha en los 4 lados con patrón geométrico clásico.
+    float edge = min(min(vUvs.x, 1.0 - vUvs.x), min(vUvs.y, 1.0 - vUvs.y));
+    if (edge < 0.04){
+      vec2 ep = floor(p / 6.0);
+      // patrón de meandros: bandas alternas
+      float band = mod(ep.x + ep.y * 0.5, 4.0);
+      col = band < 2.0 ? vec3(0.22,0.10,0.06) : vec3(0.78,0.30,0.20);
+      // doble línea de borde dorada
+      if (edge < 0.012) col = vec3(0.78,0.62,0.28);
+    }
+
+    // sombra muy sutil (el mosaico es plano, no buscamos lighting)
+    float shade = fbm(w*1.6) * 0.08;
+    col *= 0.94 + shade * 0.12;
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+const app = new PIXI.Application({
+  resizeTo: window,
+  background: 0x0a120a,
+  antialias: false,
+  resolution: 1,
+});
+document.getElementById('app').appendChild(app.view);
+app.view.style.imageRendering = 'pixelated';
+
+const geometry = new PIXI.Geometry()
+  .addAttribute('aVertexPosition', [-1,-1, 1,-1, 1,1, -1,1], 2)
+  .addAttribute('aUvs', [0,0, 1,0, 1,1, 0,1], 2)
+  .addIndex([0,1,2, 0,2,3]);
+
+let currentSeed = Math.floor(Math.random()*1000);
+const uniforms = {
+  uRes:   [window.innerWidth, window.innerHeight],
+  uTime:  0,
+  uSeed:  currentSeed,
+  uPixel: 4.0,
+  uWind:  0.5,
+};
+const shader = PIXI.Shader.from(vert, frag, uniforms);
+
+// full-screen quad scaled to window
+const quad = new PIXI.Mesh(geometry, shader);
+quad.position.set(0, 0);
+function setQuadSize(){
+  quad.scale.set(window.innerWidth, window.innerHeight);
+  uniforms.uRes[0] = window.innerWidth;
+  uniforms.uRes[1] = window.innerHeight;
+}
+setQuadSize();
+quad.position.set(0, 0);
+// our vertices are -1..1 — easier: just stretch via app
+app.stage.addChild(quad);
+// reset transform — use a different approach: render full-screen using vertices directly in screen space
+// rebuild geometry to use screen-space vertices
+function buildFullScreenGeom(){
+  const w = window.innerWidth, h = window.innerHeight;
+  return new PIXI.Geometry()
+    .addAttribute('aVertexPosition', [0,0, w,0, w,h, 0,h], 2)
+    .addAttribute('aUvs', [0,0, 1,0, 1,1, 0,1], 2)
+    .addIndex([0,1,2, 0,2,3]);
+}
+app.stage.removeChild(quad);
+const quad2 = new PIXI.Mesh(buildFullScreenGeom(), shader);
+app.stage.addChild(quad2);
+
+let t0 = performance.now();
+app.ticker.add(() => {
+  uniforms.uTime = (performance.now() - t0) / 1000;
+  uniforms.uWind = 0.45 + 0.35 * Math.sin(uniforms.uTime * 0.13);
+});
+
+window.addEventListener('resize', () => {
+  app.renderer.resize(window.innerWidth, window.innerHeight);
+  app.stage.removeChild(quad2);
+  quad2.geometry.destroy();
+  quad2.geometry = buildFullScreenGeom();
+  app.stage.addChild(quad2);
+  uniforms.uRes[0] = window.innerWidth;
+  uniforms.uRes[1] = window.innerHeight;
+});
+
+document.getElementById('seedView').textContent = currentSeed;
+document.getElementById('reseed').addEventListener('click', () => {
+  currentSeed = Math.floor(Math.random()*1000);
+  uniforms.uSeed = currentSeed;
+  document.getElementById('seedView').textContent = currentSeed;
+});
+
+/* ============================================================
+   Procedural ambient audio: wind that breathes with shader's
+   uWind uniform; bubbling water; occasional bird chirps.
+   ============================================================ */
+class Ambient {
+  constructor(){ this.ac = null; this.master = null; this.muted = false; }
+  start(){
+    if (this.ac) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    this.ac = new AC(); const ac = this.ac;
+    this.master = ac.createGain(); this.master.gain.value = 0;
+    this.master.connect(ac.destination);
+    this.master.gain.linearRampToValueAtTime(0.6, ac.currentTime + 1.2);
+
+    // pink-ish wind
+    const bufSize = 2 * ac.sampleRate;
+    const wbuf = ac.createBuffer(1, bufSize, ac.sampleRate);
+    const wd = wbuf.getChannelData(0);
+    let b0=0,b1=0,b2=0;
+    for (let i=0;i<bufSize;i++){
+      const w = Math.random()*2-1;
+      b0 = 0.99765*b0 + w*0.0990460;
+      b1 = 0.96300*b1 + w*0.2965164;
+      b2 = 0.57000*b2 + w*1.0526913;
+      wd[i] = (b0+b1+b2 + w*0.1848)*0.07;
+    }
+    const w = ac.createBufferSource(); w.buffer = wbuf; w.loop = true;
+    const wlp = ac.createBiquadFilter(); wlp.type='lowpass'; wlp.frequency.value = 600;
+    this.windGain = ac.createGain(); this.windGain.gain.value = .25;
+    w.connect(wlp).connect(this.windGain).connect(this.master); w.start();
+
+    // bubbling water: brown noise bandpassed, fast LFO
+    const bbuf = ac.createBuffer(1, bufSize, ac.sampleRate);
+    const bd = bbuf.getChannelData(0); let last=0;
+    for (let i=0;i<bufSize;i++){ const x=Math.random()*2-1; last=(last+0.02*x)/1.02; bd[i]=last*3.5; }
+    const b = ac.createBufferSource(); b.buffer = bbuf; b.loop = true;
+    const bp = ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=520; bp.Q.value=.9;
+    const bg = ac.createGain(); bg.gain.value=.40;
+    const lfo = ac.createOscillator(); lfo.frequency.value=.18;
+    const lfoG = ac.createGain(); lfoG.gain.value = 220;
+    lfo.connect(lfoG).connect(bp.frequency); lfo.start();
+    b.connect(bp).connect(bg).connect(this.master); b.start();
+
+    // bird chirps — pure sinewaves with quick frequency glide
+    const bird = () => {
+      if (!this.ac) return;
+      if (!this.muted){
+        const t = ac.currentTime;
+        const base = 1800 + Math.random()*1400;
+        const reps = 2 + Math.floor(Math.random()*3);
+        for (let k=0;k<reps;k++){
+          const t2 = t + k*0.10;
+          const o = ac.createOscillator(); o.type='sine';
+          o.frequency.setValueAtTime(base, t2);
+          o.frequency.exponentialRampToValueAtTime(base*1.4, t2+.06);
+          o.frequency.exponentialRampToValueAtTime(base*0.9, t2+.12);
+          const g = ac.createGain();
+          g.gain.setValueAtTime(0, t2);
+          g.gain.linearRampToValueAtTime(.05, t2+.01);
+          g.gain.exponentialRampToValueAtTime(.0001, t2+.12);
+          o.connect(g).connect(this.master);
+          o.start(t2); o.stop(t2+.14);
+        }
+      }
+      setTimeout(bird, 2500 + Math.random()*4000);
+    };
+    setTimeout(bird, 1500);
+
+    // wire wind to shader uniform
+    setInterval(() => {
+      if (this.windGain && uniforms){
+        const target = 0.12 + 0.30 * uniforms.uWind;
+        this.windGain.gain.linearRampToValueAtTime(target, ac.currentTime + 0.3);
+      }
+    }, 250);
+  }
+  toggleMute(){
+    if (!this.ac) return;
+    this.muted = !this.muted;
+    this.master.gain.cancelScheduledValues(this.ac.currentTime);
+    this.master.gain.linearRampToValueAtTime(this.muted ? 0 : 0.6, this.ac.currentTime + .4);
+  }
+}
+const ambient = new Ambient();
+
+const overlay = document.getElementById('overlay');
+overlay.addEventListener('click', () => { overlay.classList.add('hidden'); ambient.start(); });
+document.getElementById('mute').addEventListener('click', e => {
+  ambient.toggleMute(); e.target.textContent = ambient.muted ? 'unmute' : 'mute';
+});
+</script>
+</body>
+</html>
